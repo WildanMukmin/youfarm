@@ -1,6 +1,6 @@
 # Status pengerjaan
 
-Diperbarui: 9 Okt 2026. Acuan rencana: `ide-awal-youfarm.md` (bagian 10, Fase 1 dan 2).
+Diperbarui: 9 Okt 2026 (akhir hari). Pixabay, Groq, Deepgram, dan upload YouTube sudah dicoba pengguna dengan key asli dan berjalan. Acuan rencana: `ide-awal-youfarm.md` (bagian 10, Fase 1 dan 2).
 
 ## Sudah jadi dan teruji
 
@@ -38,10 +38,10 @@ Perintah: `npm run dev`, `npm run build`, `npm run typecheck`, `npm test` (113 t
 
 1. `npm run dev`.
 2. **Settings > API**: isi key **Gemini** dan **Pixabay** (gratis, dari pixabay.com/api/docs setelah login), klik **Muat daftar model**, pilih model teks. (Model TTS hanya bila memakai suara Gemini.)
-3. **Buat**: isi topik, pilih Piper, klik **Buat video**. Video disimpan di `Videos\YouFarm` (atau folder hasil di Settings > Umum).
-4. Untuk upload: **Akun** > isi kredensial Google > Hubungkan channel, lalu di hasil klik **Masukkan ke antrean upload**.
+3. **Fakta Unik**: isi topik (atau minta saran AI), atur bahasa, suara, dan caption, klik **Buat video**. Video masuk antrean produksi, dibuat satu per satu, dan disimpan di `Videos\YouFarm` (atau folder hasil di Settings > Umum).
+4. Untuk upload: **Akun** > isi kredensial Google > Hubungkan channel. Centang **Unggah otomatis** di form, atau kirim dari panel Publikasi video yang sudah jadi.
 
-Bila ada yang gagal, kirim pesan errornya. Titik paling mungkin: bentuk respons Gemini/Pixabay yang sedikit berbeda dari dokumentasi.
+Bila ada yang gagal, kirim pesan errornya.
 
 ## Keputusan yang saya ambil sendiri (silakan diubah)
 
@@ -51,7 +51,9 @@ Bila ada yang gagal, kirim pesan errornya. Titik paling mungkin: bentuk respons 
 - **Waktu sorot kata di caption diperkirakan** dari panjang tiap kata dalam rentang ucapan kalimatnya (tanpa transkripsi). Cukup pas untuk suara sintetis; bisa meleset sedikit di kata yang sangat pendek atau panjang.
 - **Huruf yang tidak ada di font caption** (Jepang, Thai, Arab, Hindi, Korea, Mandarin, Kiril) otomatis diambil libass dari font Windows. Sudah dicek dengan render.
 - **Saran topik** memakai penulis teks di Settings (Gemini atau Groq) dan menghindari judul yang sudah pernah jadi.
-- **Slot tayang bawaan** 07.00, 12.00, 19.00 waktu lokal untuk semua channel (`modes.ipc.ts`). Pengaturan per channel belum ada UI-nya.
+- **Slot tayang bawaan** 07.00, 12.00, 19.00 waktu lokal untuk channel baru; bisa diubah per channel di menu Akun.
+- **Satu jalur produksi** (keputusan pengguna): semua video lewat antrean, satu sekali jalan. Tidak ada lagi pembuatan langsung di luar antrean.
+- **Naskah salah bahasa** (Indonesia tertukar Inggris) ditolak dan diminta ulang sekali; ditemukan dari video asli yang naskahnya Inggris padahal dipilih Indonesia.
 - **Sumber footage dipilih di form** (bawaan Pixabay). Kredit sumber otomatis masuk deskripsi video, mis. `Footage: Pixabay (pixabay.com)`.
 - **Hasil pencarian Pixabay dicache 24 jam** (syarat API Pixabay) di `cache\pixabay-search`, jadi topik yang mirip tidak memanggil API ulang. Batas 100 permintaan per menit: bila tercapai, aplikasi menunggu jendela berikutnya sekali lalu mencoba lagi.
 - **Footage Pixabay kebanyakan lanskap**: dipilih rendisi terkecil yang sisi pendeknya ≥ 1080 (biasanya 1920x1080), lalu di-crop tengah ke 9:16. Rendisi di atas 150 MB dilewati.
@@ -66,7 +68,9 @@ Bila ada yang gagal, kirim pesan errornya. Titik paling mungkin: bentuk respons 
 - Suara ElevenLabs (key-nya sudah bisa diisi, belum dipakai). Suara Indonesia open-source yang lebih natural dari Piper: belum ada yang matang untuk CPU tanpa Python (lihat catatan riset di percakapan).
 - 3 pilihan judul dari AI, deskripsi dengan chapter, upload caption SRT sebagai track (berkas SRT sudah dibuat, belum diunggah).
 - Pembersihan otomatis cache footage (`%APPDATA%\youfarm\cache\footage`) yang akan membesar.
-- UI slot jam tayang per channel, Library, Channel/project, Template, Auto-ide, Batch produksi.
+- **Library / galeri video** (ide pengguna): riwayat semua video jadi yang bisa diputar ulang dan dilihat lagi. Sementara, video terbaru ada di daftar bawah bingkai tengah dan semuanya di menu Antrean.
+- Opsi unggah otomatis sebagai pribadi dulu (untuk ditinjau sebelum publik); untuk sekarang unggah otomatis mengikuti privasi dan jadwal yang dipilih.
+- Channel/project dan Template.
 - Dashboard Analitik (izin `yt-analytics.readonly` sudah diminta saat menghubungkan akun).
 - Tema terang. Paket produksi: `electron-builder` belum dikonfigurasi (perlu `asarUnpack` untuk wasm `sql.js`, serta menyalin `binaries/`, `models/`, dan font caption ke `resources`). `npm audit` melaporkan 15 temuan, belum diselidiki.
 
@@ -83,6 +87,6 @@ Bila ada yang gagal, kirim pesan errornya. Titik paling mungkin: bentuk respons 
 
 ## Usulan langkah berikutnya
 
-1. Coba alur di atas dengan key sungguhan dan kabari hasilnya (terutama bentuk respons Gemini, Groq, Deepgram, dan Pixabay).
-2. Rapikan kualitas hasil Fakta Unik dari video nyata: jeda antar kalimat, kecepatan suara, pilihan footage.
+1. Pantau kualitas hasil Fakta Unik dari video nyata: jeda antar kalimat, kecepatan suara, pilihan footage, ketepatan waktu sorot kata di caption (waktunya diperkirakan, bukan hasil transkripsi). Bila naskah masih sesekali salah bahasa dengan model tertentu, kirim model dan waktunya.
+2. Galeri/riwayat video (menu Library) dan pembersihan cache footage.
 3. Mode berikutnya: Animasi 3D atau Alur Cerita (keduanya butuh keputusan Anda di bagian 11 ide awal).

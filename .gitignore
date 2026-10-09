@@ -25,3 +25,8 @@ desktop.ini
 # sisa tooling
 *.tsbuildinfo
 coverage/
+
+# Alat agen AI (skill terpasang dan kuncinya), bukan bagian aplikasi
+.agents/
+.claude/
+skills-lock.json
