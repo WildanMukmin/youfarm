@@ -1,0 +1,20 @@
+:root {
+  --bg: #0B0709;
+  --panel: #14090C;
+  --panel-2: #1B0D11;
+  --border: #2A1217;
+  --border-hi: #4A1C26;
+  --crimson: #E11D48;
+  --crimson-hi: #FF5C7A;
+  --crimson-dim: #5A0F22;
+  --text: #F5EBED;
+  --muted: #A59298;
+  --amber: #F5B83D;
+  --ok: #2DD4BF;
+  --err: #FF8A5B;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --font-display: 'Chakra Petch', sans-serif;
+  --font-body: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}

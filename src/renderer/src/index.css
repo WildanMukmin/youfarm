@@ -1,0 +1,26 @@
+@import '../../../assets/fonts/fonts.css';
+@import '../../../assets/brand/tokens/tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 48px 48px;
+    background-position: -1px -1px;
+  }
+  :focus-visible {
+    outline: 2px solid var(--crimson-hi);
+    outline-offset: 2px;
+  }
+}

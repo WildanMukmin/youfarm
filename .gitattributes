@@ -1,0 +1,11 @@
+# Akhir baris seragam (LF) di repo, apa pun pengaturan Git tiap mesin.
+* text=auto eol=lf
+
+# Berkas biner: jangan diubah akhir barisnya.
+*.ttf binary
+*.woff2 binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.mp4 binary
+*.wav binary

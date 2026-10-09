@@ -1,0 +1,24 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>YouFarm Logo Konsep</title>
+<style>
+body{margin:0;background:#0B0709;color:#F5EBED;font:15px/1.5 system-ui,sans-serif;padding:32px 16px}
+h1{font-size:20px;margin:0 0 24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;max-width:1080px}
+.c{background:#14090C;border:1px solid #2A1217;border-radius:8px;padding:20px}
+.big{width:140px;height:140px;display:block;margin:0 auto 16px}
+.sizes{display:flex;gap:14px;align-items:center;justify-content:center;margin-bottom:14px}
+.sizes svg{display:block}
+.light{background:#F5EBED;border-radius:6px;padding:10px;display:flex;justify-content:center;margin-bottom:12px}
+b{display:block;font-size:16px}span{color:#A59298;font-size:13px}
+</style></head><body>
+<h1>YouFarm: 4 konsep logo</h1>
+<div class="grid" id="g"></div>
+<script>
+const items=[
+ ['A','Tunas Y','Huruf Y yang tumbuh jadi dua daun.','a-tunas-y.svg'],
+ ['B','Play Sprout','Tombol play yang bertunas: video + tumbuh.','b-play-sprout.svg'],
+ ['C','Y + Play','Huruf Y dengan tombol play di celahnya: video lahir dari satu ide.','c-y-play.svg'],
+ ['D','YF','Monogram Y dan F berbagi satu batang.','d-yf.svg']];
+const g=document.getElementById('g');
+items.forEach(([k,n,d,f])=>g.insertAdjacentHTML('beforeend',
+`<div class="c"><img class="big" src="concepts/${f}" alt="${n}"><div class="sizes"><img src="concepts/${f}" width="48" height="48"><img src="concepts/${f}" width="24" height="24"><img src="concepts/${f}" width="16" height="16"></div><b>${k}. ${n}</b><span>${d}</span></div>`));
+</script></body></html>

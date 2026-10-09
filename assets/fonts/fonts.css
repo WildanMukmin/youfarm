@@ -1,0 +1,9 @@
+/* Font dibundel lokal (subset latin, cukup untuk bahasa Indonesia). Lisensi SIL OFL di tiap folder. */
+@font-face { font-family: 'Chakra Petch'; font-weight: 600; font-display: swap; src: url('./chakra-petch/chakra-petch-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Chakra Petch'; font-weight: 700; font-display: swap; src: url('./chakra-petch/chakra-petch-latin-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-weight: 400; font-display: swap; src: url('./ibm-plex-sans/ibm-plex-sans-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-weight: 500; font-display: swap; src: url('./ibm-plex-sans/ibm-plex-sans-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-weight: 600; font-display: swap; src: url('./ibm-plex-sans/ibm-plex-sans-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 400; font-display: swap; src: url('./jetbrains-mono/jetbrains-mono-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 500; font-display: swap; src: url('./jetbrains-mono/jetbrains-mono-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 700; font-display: swap; src: url('./jetbrains-mono/jetbrains-mono-latin-700-normal.woff2') format('woff2'); }

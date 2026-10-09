@@ -1,0 +1,27 @@
+node_modules/
+out/
+release/
+dist/
+binaries/*
+models/*
+!binaries/.gitkeep
+!models/.gitkeep
+*.log
+.env
+.DS_Store
+
+# variasi env (contoh tetap boleh di-commit)
+.env.*
+!.env.example
+
+# sampah Windows dan editor
+Thumbs.db
+desktop.ini
+.idea/
+
+# pengaturan pribadi Claude Code
+.claude/settings.local.json
+
+# sisa tooling
+*.tsbuildinfo
+coverage/

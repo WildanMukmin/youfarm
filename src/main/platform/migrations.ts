@@ -1,0 +1,25 @@
+/** Tambah migrasi baru di AKHIR daftar. Jangan ubah yang sudah ada. Tanpa Electron, jadi bisa dipakai tes. */
+export const MIGRATIONS: string[] = [
+  `CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+
+  `CREATE TABLE uploads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_id TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    template TEXT,
+    file_path TEXT NOT NULL,
+    thumbnail_path TEXT,
+    playlist_id TEXT,
+    input_json TEXT NOT NULL,
+    status TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    not_before TEXT,
+    error_kind TEXT,
+    error_message TEXT,
+    warning TEXT,
+    video_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX uploads_status ON uploads (status, id)`
+]
