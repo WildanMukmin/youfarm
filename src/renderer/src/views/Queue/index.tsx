@@ -1,58 +1,71 @@
-import { needsAttention, type QueueItem } from '@shared/youtube/queue'
-import QuotaMeter from '@/components/QuotaMeter'
+import { CloudUpload, Factory, Pause, Play } from 'lucide-react'
+import { needsAttention } from '@shared/youtube/queue'
 import { useQueue } from '@/hooks/useQueue'
-import Card from '@/ui/Card'
-import PageHeader from '@/ui/PageHeader'
-import QueueRow from './QueueRow'
+import { useStickyState } from '@/hooks/useStickyState'
+import Workspace from '@/layout/Workspace'
+import type { ViewProps } from '@/layout/views'
+import Button from '@/ui/Button'
+import PanelTabs from '@/ui/PanelTabs'
+import StatusChip from '@/ui/StatusChip'
+import UploadTab from './UploadTab'
 
-export default function QueueView() {
-  const { snapshot, channelNames, retry, remove } = useQueue()
+type Tab = 'upload' | 'produksi'
 
-  if (!snapshot) {
-    return (
-      <section className="mx-auto max-w-3xl p-8">
-        <PageHeader title="Antrean" />
-        <p className="text-ink-muted">Memuat…</p>
-      </section>
-    )
-  }
+export default function QueueView({ onNavigate }: ViewProps) {
+  const q = useQueue()
+  const [tab, setTab] = useStickyState<Tab>('antrean:tab', 'upload')
+  const snap = q.snapshot
+  const items = snap?.items ?? []
+  const attention = items.filter(needsAttention).length
+  const pending = items.filter((i) => i.status === 'queued' || i.status === 'uploading').length
 
-  const attention = snapshot.items.filter(needsAttention)
-  const active = snapshot.items.filter((i) => i.status === 'queued' || i.status === 'uploading').reverse()
-  const done = snapshot.items.filter((i) => i.status === 'done')
-
-  const list = (items: QueueItem[]) => (
-    <ul className="grid gap-3">
-      {items.map((i) => (
-        <QueueRow key={i.id} item={i} channelName={channelNames[i.channelId] ?? i.channelId} onRetry={(id) => void retry(id)} onRemove={(id) => void remove(id)} />
-      ))}
-    </ul>
+  const actions = snap && (
+    <>
+      <StatusChip tone={snap.running ? 'active' : 'warn'}>{snap.running ? 'Berjalan' : 'Dijeda'}</StatusChip>
+      {snap.running ? (
+        <Button variant="ghost" size="sm" onClick={() => void q.pause()} title="Hentikan upload sementara. Upload yang sedang berjalan kembali antre.">
+          <span className="flex items-center gap-1.5">
+            <Pause size={14} aria-hidden /> Jeda
+          </span>
+        </Button>
+      ) : (
+        <Button size="sm" onClick={() => void q.resume()}>
+          <span className="flex items-center gap-1.5">
+            <Play size={14} aria-hidden /> Lanjutkan
+          </span>
+        </Button>
+      )}
+    </>
   )
 
   return (
-    <section className="mx-auto max-w-3xl p-8 pb-16">
-      <PageHeader title="Antrean" subtitle="Video yang menunggu diunggah ke YouTube. Berjalan di latar dan dilanjutkan bila aplikasi dibuka lagi." />
-      <div className="grid gap-5">
-        <Card title="Kuota">
-          <QuotaMeter quota={snapshot.quota} />
-        </Card>
-
-        {attention.length > 0 && (
-          <Card title={`Perlu perhatian (${attention.length})`} description="Antrean tetap jalan untuk video lain.">
-            {list(attention)}
-          </Card>
-        )}
-
-        <Card title={`Antre (${active.length})`}>
-          {active.length === 0 ? <p className="text-sm text-ink-muted">Tidak ada video yang menunggu. Video yang dibuat dari menu Buat muncul di sini.</p> : list(active)}
-        </Card>
-
-        {done.length > 0 && (
-          <Card title={`Selesai (${done.length})`}>
-            {list(done)}
-          </Card>
-        )}
-      </div>
-    </section>
+    <Workspace
+      title="Antrean"
+      subtitle={snap ? `${pending} menunggu${attention ? ` · ${attention} perlu perhatian` : ''} · upload berjalan di latar dan lanjut saat aplikasi dibuka lagi` : 'Memuat…'}
+      actions={actions}
+      tabs={
+        <PanelTabs
+          variant="bar"
+          label="Jenis antrean"
+          active={tab}
+          onChange={setTab}
+          tabs={[
+            { id: 'upload', label: 'Upload', count: items.length, icon: <CloudUpload size={15} aria-hidden /> },
+            { id: 'produksi', label: 'Produksi', soon: 'Segera', icon: <Factory size={15} aria-hidden /> }
+          ]}
+        />
+      }
+    >
+      {snap ? (
+        <UploadTab
+          snapshot={snap}
+          channelNames={q.channelNames}
+          onRetry={(id) => void q.retry(id)}
+          onRemove={(id) => void q.remove(id)}
+          onOpen={(id) => void q.openVideo(id)}
+          onCreate={() => onNavigate('fakta-unik')}
+        />
+      ) : null}
+    </Workspace>
   )
 }

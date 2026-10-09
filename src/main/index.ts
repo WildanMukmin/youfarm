@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { registerIpc } from './ipc'
 import { initDb } from './platform/db'
 import { registerMediaScheme } from './platform/media-protocol'
-import { getUploadQueue, queueLoopOptions } from './youtube/queue'
+import { startUploadQueue } from './youtube/queue'
 
 const BG = '#0B0709'
 
@@ -53,7 +53,7 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   await initDb()
   registerIpc()
-  getUploadQueue().start(queueLoopOptions())
+  startUploadQueue()
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

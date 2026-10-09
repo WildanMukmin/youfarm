@@ -1,8 +1,14 @@
+import { Library } from 'lucide-react'
+import Workspace from '@/layout/Workspace'
+import EmptyState from '@/ui/EmptyState'
+import StatusChip from '@/ui/StatusChip'
+
 export default function LibraryView() {
   return (
-    <section className="p-8">
-      <h1 className="font-display text-2xl font-semibold">Library</h1>
-      <p className="mt-1 text-ink-muted">Halaman ini belum dibuat.</p>
-    </section>
+    <Workspace title="Library" subtitle="Riwayat semua video yang pernah dibuat." actions={<StatusChip tone="idle">Segera</StatusChip>}>
+      <EmptyState icon={Library} title="Library sedang dikembangkan">
+        Di sini nanti semua video hasil produksi bisa dibuka, dijadwalkan ulang, atau dihapus.
+      </EmptyState>
+    </Workspace>
   )
 }

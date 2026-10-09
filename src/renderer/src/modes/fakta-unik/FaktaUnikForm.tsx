@@ -97,22 +97,24 @@ export default function FaktaUnikForm({ running, onSubmit, onOpenSettings }: Pro
           <p className="text-xs text-ink-muted">{opts.voiceSource === 'piper' ? 'Gratis dan berjalan offline.' : 'Lebih natural, memakai kuota Gemini.'}</p>
         </div>
 
-        <Select label="Suara" value={opts.voiceName} onChange={(e) => set('voiceName', e.target.value)}>
-          <option value="">Bawaan</option>
-          {voiceChoices.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </Select>
-
-        <Select label="Gaya caption" value={opts.captionStyle} onChange={(e) => set('captionStyle', e.target.value as FaktaUnikOptions['captionStyle'])}>
-          {CAPTION_STYLES.map((c) => (
-            <option key={c} value={c}>
-              {CAPTION_LABEL[c]}
-            </option>
-          ))}
-        </Select>
+        <div className="grid grid-cols-2 gap-3">
+          <Select label="Suara" value={opts.voiceName} onChange={(e) => set('voiceName', e.target.value)}>
+            <option value="">Bawaan</option>
+            {voiceChoices.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </Select>
+  
+          <Select label="Gaya caption" value={opts.captionStyle} onChange={(e) => set('captionStyle', e.target.value as FaktaUnikOptions['captionStyle'])}>
+            {CAPTION_STYLES.map((c) => (
+              <option key={c} value={c}>
+                {CAPTION_LABEL[c]}
+              </option>
+            ))}
+          </Select>
+        </div>
       </fieldset>
 
       {issues.length > 0 && (

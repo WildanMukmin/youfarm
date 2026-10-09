@@ -1,8 +1,14 @@
+import { ChartColumn } from 'lucide-react'
+import Workspace from '@/layout/Workspace'
+import EmptyState from '@/ui/EmptyState'
+import StatusChip from '@/ui/StatusChip'
+
 export default function AnalyticsView() {
   return (
-    <section className="p-8">
-      <h1 className="font-display text-2xl font-semibold">Analitik</h1>
-      <p className="mt-1 text-ink-muted">Halaman ini belum dibuat.</p>
-    </section>
+    <Workspace title="Analitik" subtitle="Performa channel dan video dari YouTube Analytics." actions={<StatusChip tone="idle">Segera</StatusChip>}>
+      <EmptyState icon={ChartColumn} title="Dashboard analitik sedang dikembangkan">
+        Izin analitik sudah diminta saat Anda menghubungkan channel, jadi dashboard bisa langsung memakainya begitu siap.
+      </EmptyState>
+    </Workspace>
   )
 }

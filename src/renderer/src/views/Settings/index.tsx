@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { KeyRound, SlidersHorizontal } from 'lucide-react'
 import { useSettings } from '@/hooks/useSettings'
-import PageHeader from '@/ui/PageHeader'
-import Tabs, { type TabItem } from '@/ui/Tabs'
+import { useStickyState } from '@/hooks/useStickyState'
+import Workspace from '@/layout/Workspace'
+import PanelTabs from '@/ui/PanelTabs'
+import ScrollArea from '@/ui/ScrollArea'
 import ApiKeysCard from './ApiKeysCard'
 import AppearanceCard from './AppearanceCard'
 import ProvidersCard from './ProvidersCard'
@@ -9,38 +11,46 @@ import StorageCard from './StorageCard'
 
 type TabId = 'general' | 'api'
 
-const TABS: TabItem<TabId>[] = [
-  { id: 'general', label: 'Umum' },
-  { id: 'api', label: 'API' }
-]
-
 export default function SettingsView() {
   const { settings, status, update, changeSecrets } = useSettings()
-  const [tab, setTab] = useState<TabId>('general')
+  const [tab, setTab] = useStickyState<TabId>('settings:tab', 'general')
 
   return (
-    <section className="mx-auto max-w-3xl p-8 pb-16">
-      <PageHeader title="Settings" subtitle="Pengaturan umum. Opsi teknis ada di tiap mode." />
-      {settings && status ? (
-        <Tabs tabs={TABS} active={tab} onChange={setTab}>
-          <div className="grid gap-5">
-            {tab === 'general' && (
+    <Workspace
+      title="Settings"
+      subtitle="Pengaturan umum. Opsi teknis (suara, caption, render) ada di tiap mode."
+      tabs={
+        <PanelTabs
+          variant="bar"
+          label="Bagian pengaturan"
+          active={tab}
+          onChange={setTab}
+          tabs={[
+            { id: 'general', label: 'Umum', icon: <SlidersHorizontal size={15} aria-hidden /> },
+            { id: 'api', label: 'API', icon: <KeyRound size={15} aria-hidden /> }
+          ]}
+        />
+      }
+    >
+      <ScrollArea className="p-6">
+        {settings && status ? (
+          <div className="mx-auto grid max-w-6xl items-start gap-5 lg:grid-cols-2">
+            {tab === 'general' ? (
               <>
                 <StorageCard settings={settings} onUpdate={(p) => void update(p)} />
                 <AppearanceCard settings={settings} onUpdate={(p) => void update(p)} />
               </>
-            )}
-            {tab === 'api' && (
+            ) : (
               <>
                 <ApiKeysCard status={status} onChange={(s) => void changeSecrets(s)} />
                 <ProvidersCard settings={settings} status={status} onUpdate={(p) => void update(p)} />
               </>
             )}
           </div>
-        </Tabs>
-      ) : (
-        <p className="text-ink-muted">Memuat…</p>
-      )}
-    </section>
+        ) : (
+          <p className="text-ink-muted">Memuat…</p>
+        )}
+      </ScrollArea>
+    </Workspace>
   )
 }

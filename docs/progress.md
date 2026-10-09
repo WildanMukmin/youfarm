@@ -17,8 +17,11 @@ Diperbarui: 9 Okt 2026. Acuan rencana: `ide-awal-youfarm.md` (bagian 10, Fase 1 
 | Navigasi per mode | Tiap mode punya menu sendiri di sidebar; mode yang belum ada menampilkan halaman "segera" | app sungguhan |
 | Ruang kerja editor | Fakta Unik: panel Input (kiri), pratinjau 9:16 + tahapan + progres + Batal (tengah), Naskah / Publikasi (kanan). Video diputar langsung di aplikasi lewat protokol `youfarm-media://` (bisa seek). Isian form dan proses bertahan saat pindah menu | app sungguhan |
 | Akun (tabel) | Kredensial di panel kiri; channel dalam tabel dengan cari, filter status, paginasi 10/25/50 per halaman | app sungguhan, 23 channel palsu |
+| Antrean (tab Upload) | Bilah judul dengan Jeda/Lanjutkan (bertahan setelah aplikasi ditutup), tab Upload dan Produksi (segera), deret statistik (kuota, menunggu, perlu perhatian, terunggah hari ini) yang bisa diklik sebagai filter, tabel dengan filter status/channel, cari, paginasi, buka di YouTube Studio | app sungguhan, 18 item palsu |
+| Sidebar | Bisa diciutkan (ikon saja + tooltip) atau dibuka (ikon + label + badge), Ctrl+B, pilihan diingat; badge Antrean merah bila ada yang perlu perhatian | app sungguhan |
+| Tanpa scrollbar | Scrollbar disembunyikan di seluruh aplikasi; panel yang lebih panjang dari layar tetap bisa digeser dengan bayangan tepi sebagai penanda; tabel memakai baris "pas layar" dan menyembunyikan kolom kurang penting saat sempit | dicek di 960x600, 1280x800, 1600x900, sidebar terbuka dan ciut |
 
-Perintah: `npm run dev`, `npm run build`, `npm run typecheck`, `npm test` (86 tes), `npm run setup:ffmpeg`, `npm run setup:piper`.
+Perintah: `npm run dev`, `npm run build`, `npm run typecheck`, `npm test` (89 tes), `npm run setup:ffmpeg`, `npm run setup:piper`.
 
 ### Yang terbukti di Fakta Unik
 - **Nyata**: ffmpeg (render, caption terbakar, thumbnail), Piper (suara Indonesia), antrean, SQLite, enkripsi key, IPC, UI.
@@ -50,7 +53,7 @@ Bila ada yang gagal, kirim pesan errornya. Titik paling mungkin: bentuk respons 
 - **Mode lain**: Alur Cerita (butuh whisper.cpp + pencocokan klip), Animasi 3D, Kids, ASMR, Bedah Konten.
 - Provider **Groq untuk naskah** (Settings bisa memilihnya, tetapi mode menolak dengan pesan jelas). Suara Deepgram/ElevenLabs.
 - 3 pilihan judul dari AI, deskripsi dengan chapter, upload caption SRT sebagai track (berkas SRT sudah dibuat, belum diunggah).
-- Antrean, Settings, Library masih tata letak halaman lama (kartu). Antrean akan dijadikan tabel seperti Akun.
+- Tab Produksi di Antrean (batch pembuatan video) belum dibangun.
 - Pembersihan otomatis cache footage (`%APPDATA%\youfarm\cache\pexels`) yang akan membesar.
 - UI slot jam tayang per channel, Library, Channel/project, Template, Auto-ide, Batch produksi.
 - Dashboard Analitik (izin `yt-analytics.readonly` sudah diminta saat menghubungkan akun).

@@ -7,14 +7,14 @@ interface Props extends SelectHTMLAttributes<HTMLSelectElement> {
 export default function Select({ label, className = '', children, ...rest }: Props) {
   const id = useId()
   return (
-    <div className="grid gap-1.5">
+    <div className="grid min-w-0 gap-1.5">
       <label htmlFor={id} className="text-xs text-ink-muted">
         {label}
       </label>
       <select
         id={id}
         {...rest}
-        className={`rounded-sm border border-line-hi bg-bg px-3 py-2.5 text-sm text-ink focus:border-crimson focus:outline-none focus:ring-2 focus:ring-crimson/20 ${className}`}
+        className={`w-full min-w-0 truncate rounded-sm border border-line-hi bg-bg px-3 py-2.5 text-sm text-ink focus:border-crimson focus:outline-none focus:ring-2 focus:ring-crimson/20 ${className}`}
       >
         {children}
       </select>

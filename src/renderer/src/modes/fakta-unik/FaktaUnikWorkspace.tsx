@@ -40,6 +40,8 @@ export default function FaktaUnikWorkspace({ onNavigate }: ViewProps) {
   return (
     <Workspace
       title="Fakta Unik"
+      leftWidth={320}
+      rightWidth={300}
       subtitle="Satu topik jadi Short 30–60 detik: naskah, suara, footage, caption."
       actions={status}
       left={<FaktaUnikForm running={job.state.phase === 'running'} onSubmit={(o) => void job.run(o)} onOpenSettings={() => onNavigate('settings')} />}

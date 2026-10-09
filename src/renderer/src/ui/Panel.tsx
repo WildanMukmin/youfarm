@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import ScrollArea from './ScrollArea'
 
 interface Props {
   /** Judul kecil di kepala panel, atau elemen (mis. tab). */
@@ -11,7 +12,7 @@ interface Props {
   children: ReactNode
 }
 
-/** Panel editor: kepala tipis, isi ber-scroll sendiri, kaki tetap. */
+/** Panel editor: kepala tipis, isi tanpa scrollbar (bayangan tepi bila ada isi lagi), kaki tetap. */
 export default function Panel({ title, actions, footer, flush, children }: Props) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -19,7 +20,7 @@ export default function Panel({ title, actions, footer, flush, children }: Props
         <div className="min-w-0 font-mono text-[11px] uppercase tracking-wider text-ink-muted">{title}</div>
         {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
       </div>
-      <div className={`min-h-0 flex-1 overflow-y-auto ${flush ? '' : 'p-4'}`}>{children}</div>
+      <ScrollArea className={flush ? '' : 'p-4'}>{children}</ScrollArea>
       {footer && <div className="shrink-0 border-t border-line p-4">{footer}</div>}
     </div>
   )

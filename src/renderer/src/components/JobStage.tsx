@@ -1,6 +1,7 @@
 import { Check } from 'lucide-react'
 import type { JobStage as Stage } from '@shared/ipc-channels'
 import { mediaUrl } from '@shared/media'
+import { useElementSize } from '@/hooks/useFitRows'
 import type { JobState } from '@/hooks/useModeJob'
 import Button from '@/ui/Button'
 import Notice from '@/ui/Notice'
@@ -25,7 +26,8 @@ interface Props {
   idleHint: string
 }
 
-function Stepper({ state }: { state: JobState }) {
+/** Saat sempit hanya label langkah aktif yang ditampilkan; sisanya cukup nomor. */
+function Stepper({ state, compact }: { state: JobState; compact: boolean }) {
   const current = state.phase === 'running' ? STEPS.findIndex((s) => s.id === state.progress?.stage) : -1
   return (
     <ol className="flex shrink-0 items-center gap-1 border-b border-line px-4 py-2.5">
@@ -42,7 +44,7 @@ function Stepper({ state }: { state: JobState }) {
             >
               {done ? <Check size={11} strokeWidth={3} /> : i + 1}
             </span>
-            <span className={`truncate text-xs ${active ? 'text-ink' : 'text-ink-muted'}`}>{s.label}</span>
+            {(!compact || active) && <span className={`truncate text-xs ${active ? 'text-ink' : 'text-ink-muted'}`}>{s.label}</span>}
             {i < STEPS.length - 1 && <span className="h-px min-w-3 flex-1 bg-line-hi" />}
           </li>
         )
@@ -53,12 +55,16 @@ function Stepper({ state }: { state: JobState }) {
 
 /** Area tengah ruang kerja mode produksi: bingkai 9:16 untuk pratinjau, progres, atau hasil. */
 export default function JobStage({ state, onCancel, onReset, onOpen, idleHint }: Props) {
+  const area = useElementSize()
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <Stepper state={state} />
+    <div ref={area.ref} className="flex min-h-0 flex-1 flex-col">
+      <Stepper state={state} compact={area.width > 0 && area.width < 560} />
 
-      <div className="flex min-h-0 flex-1 items-center justify-center gap-6 overflow-auto p-6">
-        <div className="relative aspect-[9/16] h-full max-h-[720px] min-h-[320px] shrink-0 overflow-hidden rounded-md border border-line-hi bg-bg">
+      <div className="flex min-h-0 flex-1 items-center justify-center gap-6 overflow-hidden p-6" style={{ containerType: 'size' }}>
+        <div
+          className="relative aspect-[9/16] shrink-0 overflow-hidden rounded-md border border-line-hi bg-bg"
+          style={{ height: state.phase === 'error' ? 'min(100cqh, 720px, calc((100cqw - 312px) * 16 / 9))' : 'min(100cqh, 720px, calc(100cqw * 16 / 9))' }}
+        >
           {state.phase === 'done' ? (
             <video
               key={state.result.jobId}
