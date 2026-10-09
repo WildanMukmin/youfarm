@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Check, RotateCcw, Trash2 } from 'lucide-react'
+import { Check, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ApiKeyInfo, ApiKeysOverview } from '@shared/api-keys'
 import { MAX_KEYS_PER_PROVIDER } from '@shared/api-keys'
@@ -32,6 +32,46 @@ function KeyStatus({ k, auto }: { k: ApiKeyInfo; auto: boolean }) {
   if (k.limited) return <StatusChip tone="warn">{`Batas · coba lagi ${clock(k.limitedUntil)}`}</StatusChip>
   if (k.active) return <StatusChip tone="done">Dipakai</StatusChip>
   return <StatusChip tone="idle">{auto ? 'Cadangan' : 'Siap'}</StatusChip>
+}
+
+/** Nama key: klik untuk mengubah. Enter atau pindah fokus menyimpan, Esc membatalkan, kosong berarti tidak berubah. */
+function KeyName({ label, disabled, onRename }: { label: string; disabled: boolean; onRename: (label: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const commit = (): void => {
+    const next = (draft ?? '').trim()
+    setDraft(null)
+    if (next && next !== label) onRename(next)
+  }
+  if (draft !== null) {
+    return (
+      <input
+        autoFocus
+        aria-label="Nama key"
+        value={draft}
+        maxLength={40}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit()
+          if (e.key === 'Escape') setDraft(null)
+        }}
+        className="w-full rounded-sm border border-crimson bg-bg px-2 py-1.5 text-sm font-medium text-ink focus:outline-none focus:ring-2 focus:ring-crimson/20"
+      />
+    )
+  }
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      title="Ubah nama"
+      aria-label={`Ubah nama key ${label}`}
+      onClick={() => setDraft(label)}
+      className="group flex max-w-full items-center gap-2 rounded-sm text-left font-medium hover:text-crimson-hi focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson/40"
+    >
+      <span className="truncate">{label}</span>
+      <Pencil size={12} aria-hidden className="shrink-0 opacity-0 transition-opacity group-hover:opacity-70 group-focus-visible:opacity-70" />
+    </button>
+  )
 }
 
 interface Props {
@@ -148,9 +188,7 @@ export default function ApiKeysPanel({ onStatus }: Props) {
               {group.keys.map((k) => (
                 <tr key={k.id} className={`h-[52px] ${k.active ? 'bg-panel-2 shadow-[inset_2px_0_0_var(--crimson)]' : 'hover:bg-panel-2'}`}>
                   <td className={td}>
-                    <div className="truncate font-medium" title={k.label}>
-                      {k.label}
-                    </div>
+                    <KeyName label={k.label} disabled={busy} onRename={(name) => void run(() => window.youfarm.keys.rename(meta.id, k.id, name), 'Nama key diubah.')} />
                   </td>
                   <td className={`${td} tabular whitespace-nowrap font-mono text-xs text-ink-muted`}>{`••••${k.last4}`}</td>
                   <td className={`${td} whitespace-nowrap`}>

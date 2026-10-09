@@ -31,6 +31,9 @@ test('api-keys: tambah beberapa key, pilih, hapus; nilai key tidak bocor ke ring
     assert.deepEqual(g.keys.map((x) => [x.label, x.last4, x.active]), [['Akun utama', '1111', true], ['Key 2', '2222', false]])
     assert.ok(!JSON.stringify(k.overview()).includes('AIzaUTAMA'))
 
+    k.rename('gemini', g.keys[1].id, '  Akun   cadangan ')
+    k.rename('gemini', g.keys[0].id, '   ')
+    assert.deepEqual(k.overview().gemini.keys.map((x) => x.label), ['Akun utama', 'Akun cadangan'], 'nama dirapikan; kosong tidak mengubah')
     k.select('gemini', g.keys[1].id)
     assert.equal(k.current('gemini'), 'AIzaCADANG2222')
     k.remove('gemini', g.keys[1].id)
