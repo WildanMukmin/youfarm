@@ -112,15 +112,17 @@ function Section({ label, collapsed }: { label: string; collapsed: boolean }) {
   return collapsed ? (
     <div aria-hidden className="mx-auto my-2 h-px w-6 shrink-0 bg-line-hi" />
   ) : (
-    <div className="mb-1 mt-4 shrink-0 px-2.5 font-mono text-[10px] uppercase tracking-widest text-ink-muted/80">{label}</div>
+    <div className="mb-1 mt-4 shrink-0 px-2.5 text-[11px] font-medium text-ink-muted">{label}</div>
   )
 }
 
 export default function Sidebar({ active, onSelect, version, collapsed, onToggle }: Props) {
-  const { snapshot } = useQueue()
+  const { snapshot, production } = useQueue()
   const items = snapshot?.items ?? []
-  const attention = items.filter(needsAttention).length
-  const pending = items.filter((i) => i.status === 'queued' || i.status === 'uploading').length
+  const jobs = production?.items ?? []
+  // Badge Antrean menggabungkan upload dan produksi: merah bila ada yang gagal, netral untuk yang sedang berjalan.
+  const attention = items.filter(needsAttention).length + jobs.filter((j) => j.status === 'failed').length
+  const pending = items.filter((i) => i.status === 'queued' || i.status === 'uploading').length + jobs.filter((j) => j.status === 'queued' || j.status === 'running').length
   const queueBadge: Badge | null = attention ? { value: attention, tone: 'alert' } : pending ? { value: pending, tone: 'neutral' } : null
 
   return (

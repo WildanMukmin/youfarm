@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
+import type { ProductionSnapshot } from '@shared/production'
 import type { QueueSnapshot } from '@shared/youtube/queue'
 import { errMsg } from '@/lib/errors'
 
-const POLL_MS = 3000
+const POLL_MS = 2000
 
 interface State {
   snapshot: QueueSnapshot | null
+  production: ProductionSnapshot | null
   channelNames: Record<string, string>
 }
 
-// Satu sumber data antrean untuk seluruh aplikasi (halaman Antrean dan badge sidebar):
-// polling hanya berjalan selama ada komponen yang mendengarkan.
-let state: State = { snapshot: null, channelNames: {} }
+// Satu sumber data antrean (upload dan produksi) untuk seluruh aplikasi: halaman Antrean dan badge sidebar.
+// Polling hanya berjalan selama ada komponen yang mendengarkan.
+let state: State = { snapshot: null, production: null, channelNames: {} }
 const listeners = new Set<() => void>()
 let timer: ReturnType<typeof setInterval> | null = null
 
@@ -22,7 +24,10 @@ function set(patch: Partial<State>): void {
 }
 
 function tick(): void {
-  void window.youfarm?.queue.snapshot().then((snapshot) => set({ snapshot }))
+  const api = window.youfarm
+  if (!api) return
+  void api.queue.snapshot().then((snapshot) => set({ snapshot }))
+  void api.production.snapshot().then((production) => set({ production }))
 }
 
 function refreshNames(): void {
@@ -45,29 +50,45 @@ function subscribe(l: () => void): () => void {
   }
 }
 
+/** Segarkan segera (mis. setelah memasukkan job dari ruang kerja mode). */
+export const refreshQueues = (): void => tick()
+
 export function useQueue() {
   const s = useSyncExternalStore(subscribe, () => state)
 
   // Nama channel bisa berubah saat akun dihubungkan; segarkan saat halaman yang memakainya dibuka.
   useEffect(() => refreshNames(), [])
 
-  const act = useCallback(async (fn: () => Promise<QueueSnapshot | void>, ok?: string) => {
+  const act = useCallback(async <T,>(fn: () => Promise<T>, apply: (r: T) => void, ok?: string) => {
     try {
-      const r = await fn()
-      if (r) set({ snapshot: r })
+      apply(await fn())
       if (ok) toast.success(ok)
     } catch (e) {
       toast.error(errMsg(e))
     }
   }, [])
 
+  const up = (snapshot: QueueSnapshot | void): void => {
+    if (snapshot) set({ snapshot })
+  }
+  const prod = (production: ProductionSnapshot): void => set({ production })
+
   return {
     snapshot: s.snapshot,
+    production: s.production,
     channelNames: s.channelNames,
-    retry: (id: number) => act(() => window.youfarm.queue.retry(id), 'Dimasukkan lagi ke antrean.'),
-    remove: (id: number) => act(() => window.youfarm.queue.remove(id), 'Dihapus dari antrean.'),
-    pause: () => act(() => window.youfarm.queue.pause(), 'Antrean dijeda.'),
-    resume: () => act(() => window.youfarm.queue.resume(), 'Antrean dilanjutkan.'),
-    openVideo: (id: number) => act(() => window.youfarm.queue.openVideo(id))
+    retry: (id: number) => act(() => window.youfarm.queue.retry(id), up, 'Dimasukkan lagi ke antrean.'),
+    remove: (id: number) => act(() => window.youfarm.queue.remove(id), up, 'Dihapus dari antrean.'),
+    pause: () => act(() => window.youfarm.queue.pause(), up, 'Antrean upload dijeda.'),
+    resume: () => act(() => window.youfarm.queue.resume(), up, 'Antrean upload dilanjutkan.'),
+    openVideo: (id: number) => act(() => window.youfarm.queue.openVideo(id), () => undefined),
+    prod: {
+      cancel: (id: number) => act(() => window.youfarm.production.cancel(id), prod, 'Dibatalkan.'),
+      retry: (id: number) => act(() => window.youfarm.production.retry(id), prod, 'Dimasukkan lagi ke antrean produksi.'),
+      remove: (id: number) => act(() => window.youfarm.production.remove(id), prod, 'Dihapus dari antrean produksi.'),
+      pause: () => act(() => window.youfarm.production.pause(), prod, 'Antrean produksi dijeda.'),
+      resume: () => act(() => window.youfarm.production.resume(), prod, 'Antrean produksi dilanjutkan.'),
+      open: (id: number, what: 'file' | 'folder') => act(() => window.youfarm.production.open(id, what), () => undefined)
+    }
   }
 }

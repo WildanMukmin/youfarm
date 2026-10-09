@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { EnqueueRequest } from '@shared/youtube/queue'
+import type { ProductionEnqueueRequest, ProductionSnapshot } from '@shared/production'
 import {
   IPC,
   type AppInfo,
@@ -56,6 +57,16 @@ const api = {
       ipcRenderer.on(IPC.modeProgress, handler)
       return () => ipcRenderer.removeListener(IPC.modeProgress, handler)
     }
+  },
+  production: {
+    snapshot: (): Promise<ProductionSnapshot> => ipcRenderer.invoke(IPC.prodSnapshot),
+    enqueue: (req: ProductionEnqueueRequest): Promise<number[]> => ipcRenderer.invoke(IPC.prodEnqueue, req),
+    cancel: (id: number): Promise<ProductionSnapshot> => ipcRenderer.invoke(IPC.prodCancel, id),
+    retry: (id: number): Promise<ProductionSnapshot> => ipcRenderer.invoke(IPC.prodRetry, id),
+    remove: (id: number): Promise<ProductionSnapshot> => ipcRenderer.invoke(IPC.prodRemove, id),
+    pause: (): Promise<ProductionSnapshot> => ipcRenderer.invoke(IPC.prodPause),
+    resume: (): Promise<ProductionSnapshot> => ipcRenderer.invoke(IPC.prodResume),
+    open: (id: number, what: 'file' | 'folder'): Promise<void> => ipcRenderer.invoke(IPC.prodOpen, id, what)
   },
   queue: {
     snapshot: (): Promise<QueueSnapshot> => ipcRenderer.invoke(IPC.queueSnapshot),

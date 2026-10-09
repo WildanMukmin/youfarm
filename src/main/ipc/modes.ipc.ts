@@ -7,18 +7,11 @@ import {
   type ModeRunResult,
   type VoiceCatalog
 } from '@shared/ipc-channels'
-import { disclosureFor } from '@shared/contracts/modes'
-import { DEFAULT_CATEGORY_ID, GEMINI_VOICES } from '@shared/modes/fakta-unik'
-import { isChannelId } from '@shared/youtube/accounts'
-import type { Privacy } from '@shared/youtube/metadata'
-import { nextFreeSlots } from '@shared/youtube/schedule'
+import { GEMINI_VOICES } from '@shared/modes/fakta-unik'
 import { createJobRegistry, isJobId } from '../modes/jobs'
 import { piper, runWithRealDeps } from '../modes/fakta-unik/runtime'
-import { getUploadQueue } from '../youtube/queue'
-import { getAccountService } from '../youtube/account'
 import { handleMediaProtocol } from '../platform/media-protocol'
-
-const PRIVACY: Privacy[] = ['private', 'unlisted', 'public']
+import { enqueueRendered } from '../modes/publish'
 
 const jobs = createJobRegistry()
 
@@ -79,40 +72,7 @@ export function registerModesIpc(): void {
   ipcMain.handle(IPC.modeEnqueue, (_e, req: Partial<EnqueueJobRequest>): EnqueueJobResult => {
     const rec = isJobId(req?.jobId) ? jobs.get(req.jobId) : undefined
     if (!rec) throw new Error('Hasil video tidak ditemukan. Buat ulang videonya.')
-    if (!isChannelId(req.channelId)) throw new Error('Pilih channel tujuan.')
-    const privacy = PRIVACY.includes(req.privacy as Privacy) ? (req.privacy as Privacy) : 'private'
-
-    const queue = getUploadQueue()
-    let publishAt: string | null = null
-    if (req.schedule) {
-      const occupied = queue.snapshot().items.filter((i) => i.channelId === req.channelId && i.publishAt && i.status !== 'failed').map((i) => i.publishAt as string)
-      const slots = getAccountService().status().accounts.find((a) => a.channel.id === req.channelId)?.slots ?? []
-      if (slots.length === 0) throw new Error('Channel ini belum punya jam tayang. Atur di menu Akun.')
-      publishAt = nextFreeSlots({ times: slots, occupied, now: new Date(), count: 1, tzOffsetMin: new Date().getTimezoneOffset() })[0] ?? null
-    }
-
-    const { video } = rec
-    const hashtags = rec.tags.slice(0, 3).map((t) => `#${t.replace(/\s+/g, '')}`).join(' ')
-    const queueId = queue.enqueue({
-      channelId: req.channelId,
-      mode: video.mode,
-      template: video.template,
-      filePath: video.filePath,
-      thumbnailPath: video.thumbnailPath,
-      playlistId: null,
-      input: {
-        title: video.title,
-        description: [rec.description, hashtags].filter(Boolean).join('\n\n'),
-        tags: rec.tags,
-        categoryId: DEFAULT_CATEGORY_ID,
-        defaultLanguage: video.language,
-        defaultAudioLanguage: video.language,
-        ...disclosureFor(video.mode, video.syntheticMedia),
-        privacy,
-        publishAt
-      }
-    })
-    return { queueId, publishAt }
+    return enqueueRendered(rec, { channelId: req.channelId, privacy: req.privacy, schedule: req.schedule })
   })
 
   // Batalkan job yang masih berjalan supaya proses ffmpeg tidak tertinggal saat aplikasi ditutup.

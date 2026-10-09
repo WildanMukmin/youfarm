@@ -4,6 +4,7 @@ import { registerIpc } from './ipc'
 import { initDb } from './platform/db'
 import { registerMediaScheme } from './platform/media-protocol'
 import { startUploadQueue } from './youtube/queue'
+import { startProductionQueue } from './production'
 
 const BG = '#0B0709'
 
@@ -54,6 +55,7 @@ app.whenReady().then(async () => {
   await initDb()
   registerIpc()
   startUploadQueue()
+  startProductionQueue()
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

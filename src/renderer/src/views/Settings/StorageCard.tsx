@@ -7,25 +7,30 @@ interface Props {
   onUpdate: (patch: Partial<Settings>) => void
 }
 
+/** Label dan tombol di satu baris, path di baris sendiri: tetap muat di kartu sempit. */
 function FolderRow({ label, value, onPick, onReset }: { label: string; value: string | null; onPick: () => void; onReset: () => void }) {
   return (
-    <div className="grid items-center gap-3 sm:grid-cols-[1fr_auto]">
-      <div className="min-w-0">
-        <div className="text-xs text-ink-muted">{label}</div>
-        <div className="truncate font-mono text-sm" title={value ?? undefined}>
-          {value ?? 'Belum dipilih (memakai folder bawaan)'}
+    <div className="grid gap-1.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs text-ink-muted">{label}</span>
+        <div className="flex shrink-0 gap-2">
+          {value && (
+            <Button size="sm" variant="ghost" onClick={onReset}>
+              Reset
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={onPick}>
+            Pilih folder
+          </Button>
         </div>
       </div>
-      <div className="flex gap-2">
-        <Button variant="ghost" onClick={onPick}>
-          Pilih folder
-        </Button>
-        {value && (
-          <Button variant="ghost" onClick={onReset}>
-            Reset
-          </Button>
-        )}
-      </div>
+      {value ? (
+        <div className="truncate font-mono text-sm" title={value}>
+          {value}
+        </div>
+      ) : (
+        <div className="text-sm text-ink-muted">Belum dipilih. Memakai folder bawaan.</div>
+      )}
     </div>
   )
 }
@@ -37,7 +42,7 @@ export default function StorageCard({ settings, onUpdate }: Props) {
   }
   return (
     <Card title="Penyimpanan" description="Lokasi file sumber dan hasil render.">
-      <div className="grid gap-4">
+      <div className="grid gap-5">
         <FolderRow label="Folder impor" value={settings.importDir} onPick={() => void pick('importDir')} onReset={() => onUpdate({ importDir: null })} />
         <FolderRow label="Folder hasil" value={settings.outputDir} onPick={() => void pick('outputDir')} onReset={() => onUpdate({ outputDir: null })} />
       </div>

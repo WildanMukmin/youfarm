@@ -19,10 +19,11 @@ Diperbarui: 9 Okt 2026. Acuan rencana: `ide-awal-youfarm.md` (bagian 10, Fase 1 
 | Akun (tabel) | Kredensial di panel kiri; channel dalam tabel dengan cari, filter status, paginasi 10/25/50 per halaman | app sungguhan, 23 channel palsu |
 | Jam tayang per channel | Diatur di menu Akun (panel kanan): preset 1×/2×/3× sehari, tambah/hapus jam, pratinjau slot kosong berikutnya. Panel Publikasi menunjukkan kapan video akan tayang; enqueue memakai jam tayang channel | tes unit + uji menyeluruh (jadwal jatuh tepat 12.00 lokal) |
 | Antrean (tab Upload) | Bilah judul dengan Jeda/Lanjutkan (bertahan setelah aplikasi ditutup), tab Upload dan Produksi (segera), deret statistik (tayang berikutnya, menunggu, perlu perhatian, terunggah hari ini) yang bisa diklik sebagai filter, tabel dengan filter status/channel, cari, paginasi, buka di YouTube Studio. Tanpa hitungan kuota lokal | app sungguhan, 18 item palsu |
+| Antrean (tab Produksi) | Banyak topik sekaligus (satu per baris, duplikat dibuang, maks 50) dari ruang kerja Fakta Unik; dibuat satu per satu di latar, tersimpan di database, pulih setelah aplikasi ditutup; progres langsung per baris; batal, coba lagi, jeda/lanjut (job yang sedang dibuat kembali antre); judul video yang sudah jadi otomatis masuk daftar "avoid"; opsi "Unggah otomatis" memasukkan video jadi ke antrean upload di jam tayang channel | tes unit + uji menyeluruh (3 video jadi, terjadwal Jum 12.00, Jum 19.00, Sab 12.00) |
 | Sidebar | Bisa diciutkan (ikon saja + tooltip) atau dibuka (ikon + label + badge), Ctrl+B, pilihan diingat; badge Antrean merah bila ada yang perlu perhatian | app sungguhan |
 | Tanpa scrollbar | Scrollbar disembunyikan di seluruh aplikasi; panel yang lebih panjang dari layar tetap bisa digeser dengan bayangan tepi sebagai penanda; tabel memakai baris "pas layar" dan menyembunyikan kolom kurang penting saat sempit | dicek di 960x600, 1280x800, 1600x900, sidebar terbuka dan ciut |
 
-Perintah: `npm run dev`, `npm run build`, `npm run typecheck`, `npm test` (95 tes), `npm run setup:ffmpeg`, `npm run setup:piper`.
+Perintah: `npm run dev`, `npm run build`, `npm run typecheck`, `npm test` (108 tes), `npm run setup:ffmpeg`, `npm run setup:piper`.
 
 ### Yang terbukti di Fakta Unik
 - **Nyata**: ffmpeg (render, caption terbakar, thumbnail), Piper (suara Indonesia), antrean, SQLite, enkripsi key, IPC, UI.
@@ -54,7 +55,6 @@ Bila ada yang gagal, kirim pesan errornya. Titik paling mungkin: bentuk respons 
 - **Mode lain**: Alur Cerita (butuh whisper.cpp + pencocokan klip), Animasi 3D, Kids, ASMR, Bedah Konten.
 - Provider **Groq untuk naskah** (Settings bisa memilihnya, tetapi mode menolak dengan pesan jelas). Suara Deepgram/ElevenLabs.
 - 3 pilihan judul dari AI, deskripsi dengan chapter, upload caption SRT sebagai track (berkas SRT sudah dibuat, belum diunggah).
-- Tab Produksi di Antrean (batch pembuatan video) belum dibangun.
 - Pembersihan otomatis cache footage (`%APPDATA%\youfarm\cache\pexels`) yang akan membesar.
 - UI slot jam tayang per channel, Library, Channel/project, Template, Auto-ide, Batch produksi.
 - Dashboard Analitik (izin `yt-analytics.readonly` sudah diminta saat menghubungkan akun).

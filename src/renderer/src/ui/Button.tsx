@@ -8,7 +8,7 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const STYLES: Record<Variant, string> = {
-  primary: 'border-transparent bg-crimson text-white shadow-glow hover:brightness-110',
+  primary: 'border-transparent bg-crimson text-white shadow-glow hover:brightness-110 disabled:shadow-none',
   ghost: 'border-line-hi text-ink hover:border-crimson hover:text-crimson-hi'
 }
 

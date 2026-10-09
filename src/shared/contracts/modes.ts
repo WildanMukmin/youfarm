@@ -6,6 +6,8 @@ export type ModeId = (typeof MODE_IDS)[number]
 /** Mode yang menghasilkan video (Bedah Konten hanya menganalisis). */
 export type ProductionModeId = Exclude<ModeId, 'bedah-konten'>
 
+export const PRODUCTION_MODE_IDS = MODE_IDS.filter((m): m is ProductionModeId => m !== 'bedah-konten')
+
 export type AspectRatio = '9:16' | '16:9' | '1:1'
 
 /** Hasil satu mode produksi. Antrean, Library, dan Upload hanya mengenal bentuk ini. */

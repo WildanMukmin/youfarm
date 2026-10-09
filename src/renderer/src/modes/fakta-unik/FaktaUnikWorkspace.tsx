@@ -44,7 +44,7 @@ export default function FaktaUnikWorkspace({ onNavigate }: ViewProps) {
       rightWidth={300}
       subtitle="Satu topik jadi Short 30–60 detik: naskah, suara, footage, caption."
       actions={status}
-      left={<FaktaUnikForm running={job.state.phase === 'running'} onSubmit={(o) => void job.run(o)} onOpenSettings={() => onNavigate('settings')} />}
+      left={<FaktaUnikForm running={job.state.phase === 'running'} onSubmit={(o) => void job.run(o)} onOpenSettings={() => onNavigate('settings')} onOpenQueue={() => onNavigate('queue')} onOpenAccounts={() => onNavigate('accounts')} />}
       right={
         <Panel title={<PanelTabs label="Panel hasil" tabs={[{ id: 'naskah', label: 'Naskah' }, { id: 'publikasi', label: 'Publikasi' }]} active={tab} onChange={setTab} />}>
           {tab === 'naskah' ? (

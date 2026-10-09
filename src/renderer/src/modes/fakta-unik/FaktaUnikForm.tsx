@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { MAX_BATCH, splitTopics } from '@shared/production'
 import { CAPTION_STYLES, DEFAULT_OPTIONS, GEMINI_VOICES, TARGET_SECONDS, type FaktaUnikOptions } from '@shared/modes/fakta-unik'
 import { isProviderAvailable } from '@shared/settings'
 import type { VoiceCatalog } from '@shared/ipc-channels'
 import { useSettings } from '@/hooks/useSettings'
 import { useStickyState } from '@/hooks/useStickyState'
+import { refreshQueues } from '@/hooks/useQueue'
+import { errMsg } from '@/lib/errors'
 import Button from '@/ui/Button'
-import Field from '@/ui/Field'
+import TextArea from '@/ui/TextArea'
+import AutoPublish, { DEFAULT_AUTO_PUBLISH, toPlan, type AutoPublishState } from './AutoPublish'
 import Notice from '@/ui/Notice'
 import Panel from '@/ui/Panel'
 import Segmented from '@/ui/Segmented'
@@ -15,6 +20,8 @@ interface Props {
   running: boolean
   onSubmit: (options: FaktaUnikOptions) => void
   onOpenSettings: () => void
+  onOpenQueue: () => void
+  onOpenAccounts: () => void
 }
 
 const CAPTION_LABEL: Record<(typeof CAPTION_STYLES)[number], string> = {
@@ -24,10 +31,12 @@ const CAPTION_LABEL: Record<(typeof CAPTION_STYLES)[number], string> = {
 }
 
 /** Panel input mode Fakta Unik. Isian bertahan saat pindah menu. */
-export default function FaktaUnikForm({ running, onSubmit, onOpenSettings }: Props) {
+export default function FaktaUnikForm({ running, onSubmit, onOpenSettings, onOpenQueue, onOpenAccounts }: Props) {
   const { settings, status } = useSettings()
   const [opts, setOpts] = useStickyState<FaktaUnikOptions>('fakta-unik:form', DEFAULT_OPTIONS)
   const [voices, setVoices] = useState<VoiceCatalog | null>(null)
+  const [publish, setPublish] = useStickyState<AutoPublishState>('fakta-unik:auto-publish', DEFAULT_AUTO_PUBLISH)
+  const [queueing, setQueueing] = useState(false)
   const set = <K extends keyof FaktaUnikOptions>(k: K, v: FaktaUnikOptions[K]) => setOpts((o) => ({ ...o, [k]: v }))
 
   useEffect(() => {
@@ -50,7 +59,26 @@ export default function FaktaUnikForm({ running, onSubmit, onOpenSettings }: Pro
   }, [settings, status, voices, opts.voiceSource, opts.language, piperVoices.length])
 
   const loaded = Boolean(settings && status && voices)
-  const ready = loaded && issues.length === 0 && opts.topic.trim().length >= 3 && !running
+  const topics = useMemo(() => splitTopics(opts.topic), [opts.topic])
+  const short = topics.filter((t) => t.length < 3).length
+  const valid = topics.length > 0 && short === 0 && topics.length <= MAX_BATCH
+  const canRun = loaded && issues.length === 0 && valid
+  const batch = topics.length > 1
+
+  /** Masukkan semua topik ke antrean produksi dengan opsi yang sedang dipilih. */
+  const enqueue = async (): Promise<void> => {
+    setQueueing(true)
+    try {
+      const ids = await window.youfarm.production.enqueue({ mode: 'fakta-unik', options: topics.map((topic) => ({ ...opts, topic })), publish: toPlan(publish) })
+      refreshQueues()
+      toast.success(`${ids.length} video masuk antrean produksi.`, { action: { label: 'Lihat', onClick: onOpenQueue } })
+      setOpts((o) => ({ ...o, topic: '' }))
+    } catch (e) {
+      toast.error(errMsg(e))
+    } finally {
+      setQueueing(false)
+    }
+  }
   const voiceChoices = opts.voiceSource === 'piper' ? piperVoices.map((v) => v.name) : [...GEMINI_VOICES]
   const geminiOk = Boolean(status && isProviderAvailable('gemini-tts', status))
 
@@ -58,13 +86,41 @@ export default function FaktaUnikForm({ running, onSubmit, onOpenSettings }: Pro
     <Panel
       title="Input"
       footer={
-        <Button className="w-full" disabled={!ready} onClick={() => onSubmit(opts)}>
-          {running ? 'Sedang membuat…' : 'Buat video'}
-        </Button>
+        batch ? (
+          <Button className="w-full" disabled={!canRun || queueing} onClick={() => void enqueue()}>
+            {queueing ? 'Memasukkan…' : `Antrekan ${topics.length} video`}
+          </Button>
+        ) : (
+          <div className="flex gap-2">
+            <Button className="flex-1" disabled={!canRun || running} onClick={() => onSubmit({ ...opts, topic: topics[0] ?? '' })}>
+              {running ? 'Sedang membuat…' : 'Buat video'}
+            </Button>
+            <Button variant="ghost" disabled={!canRun || queueing} onClick={() => void enqueue()} title="Buat di latar lewat antrean produksi">
+              Antrekan
+            </Button>
+          </div>
+        )
       }
     >
-      <fieldset disabled={running} className="grid gap-4 disabled:opacity-60">
-        <Field label="Topik atau niche" value={opts.topic} onChange={(e) => set('topic', e.target.value)} placeholder="Contoh: fakta aneh laut dalam" maxLength={200} />
+      <div className="grid gap-4">
+        <TextArea
+          label="Topik atau niche"
+          aside={batch ? `${topics.length} video` : undefined}
+          value={opts.topic}
+          onChange={(e) => set('topic', e.target.value)}
+          placeholder={'Contoh: fakta aneh laut dalam\nTulis beberapa topik, satu per baris, untuk membuat banyak video sekaligus.'}
+          maxLength={8000}
+          rows={3}
+          hint={
+            topics.length > MAX_BATCH
+              ? `Maksimal ${MAX_BATCH} topik sekali antre.`
+              : short
+                ? 'Tiap topik minimal 3 karakter.'
+                : batch
+                  ? 'Semua topik memakai opsi di bawah dan dibuat di latar lewat antrean produksi.'
+                  : undefined
+          }
+        />
 
         <div className="grid grid-cols-2 gap-3">
           <Segmented
@@ -106,7 +162,6 @@ export default function FaktaUnikForm({ running, onSubmit, onOpenSettings }: Pro
               </option>
             ))}
           </Select>
-  
           <Select label="Gaya caption" value={opts.captionStyle} onChange={(e) => set('captionStyle', e.target.value as FaktaUnikOptions['captionStyle'])}>
             {CAPTION_STYLES.map((c) => (
               <option key={c} value={c}>
@@ -115,7 +170,9 @@ export default function FaktaUnikForm({ running, onSubmit, onOpenSettings }: Pro
             ))}
           </Select>
         </div>
-      </fieldset>
+
+        <AutoPublish value={publish} onChange={setPublish} onOpenAccounts={onOpenAccounts} />
+      </div>
 
       {issues.length > 0 && (
         <div className="mt-5">

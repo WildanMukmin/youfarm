@@ -5,7 +5,7 @@ import { errMsg } from '@/lib/errors'
 import Button from '@/ui/Button'
 import Card from '@/ui/Card'
 import Field from '@/ui/Field'
-import RadioGroup from '@/ui/RadioGroup'
+import Segmented from '@/ui/Segmented'
 import Select from '@/ui/Select'
 
 interface Props {
@@ -39,7 +39,7 @@ function ModelPicker({ label, value, options, onChange }: ModelPickerProps) {
       ))}
     </Select>
   ) : (
-    <Field label={label} value={value} placeholder="Muat daftar model, atau ketik nama model" onChange={(e) => onChange(e.target.value)} />
+    <Field label={label} value={value} placeholder="Ketik nama model, atau muat daftarnya" onChange={(e) => onChange(e.target.value)} />
   )
 }
 
@@ -60,25 +60,42 @@ export default function ProvidersCard({ settings, status, onUpdate }: Props) {
     }
   }
 
+  const geminiOk = isProviderAvailable('gemini', status)
+  const groqOk = isProviderAvailable('groq', status)
+  const providerNote =
+    settings.textProvider === 'groq'
+      ? 'Groq belum dipakai mode apa pun; naskah Fakta Unik memakai Gemini.'
+      : !geminiOk
+        ? NEED_KEY('Gemini')
+        : !groqOk
+          ? 'Groq bisa dipilih setelah key Groq diisi.'
+          : null
+
   return (
     <Card title="Penyedia AI" description="Provider cloud hanya bisa dipilih bila key-nya sudah diisi.">
       <div className="grid gap-5">
-        <RadioGroup
-          legend="Provider teks"
-          value={settings.textProvider}
-          onChange={(textProvider) => onUpdate({ textProvider })}
-          options={[
-            { value: 'gemini', label: 'Gemini', disabled: !isProviderAvailable('gemini', status), disabledReason: NEED_KEY('Gemini') },
-            { value: 'groq', label: 'Groq', hint: 'Belum dipakai mode apa pun', disabled: !isProviderAvailable('groq', status), disabledReason: NEED_KEY('Groq') }
-          ]}
-        />
+        <div className="grid gap-1.5">
+          <Segmented
+            label="Provider teks"
+            value={settings.textProvider}
+            onChange={(textProvider) => onUpdate({ textProvider })}
+            options={[
+              { value: 'gemini', label: 'Gemini', disabled: !geminiOk, title: geminiOk ? undefined : NEED_KEY('Gemini') },
+              { value: 'groq', label: 'Groq', disabled: !groqOk, title: groqOk ? undefined : NEED_KEY('Groq') }
+            ]}
+          />
+          {providerNote && <p className="text-xs text-ink-muted">{providerNote}</p>}
+        </div>
 
-        <div className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]">
-          <ModelPicker label="Model Gemini untuk teks" value={settings.geminiTextModel} options={withCurrent(models.text, settings.geminiTextModel)} onChange={(v) => onUpdate({ geminiTextModel: v })} />
-          <ModelPicker label="Model Gemini untuk suara (TTS)" value={settings.geminiTtsModel} options={withCurrent(models.tts, settings.geminiTtsModel)} onChange={(v) => onUpdate({ geminiTtsModel: v })} />
-          <Button variant="ghost" disabled={!status.gemini || loading} onClick={() => void loadModels()}>
-            {loading ? 'Memuat…' : 'Muat daftar model'}
-          </Button>
+        <div className="grid gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-ink-muted">Model Gemini</span>
+            <Button size="sm" variant="ghost" disabled={!status.gemini || loading} onClick={() => void loadModels()}>
+              {loading ? 'Memuat…' : 'Muat daftar model'}
+            </Button>
+          </div>
+          <ModelPicker label="Untuk naskah (teks)" value={settings.geminiTextModel} options={withCurrent(models.text, settings.geminiTextModel)} onChange={(v) => onUpdate({ geminiTextModel: v })} />
+          <ModelPicker label="Untuk suara (TTS)" value={settings.geminiTtsModel} options={withCurrent(models.tts, settings.geminiTtsModel)} onChange={(v) => onUpdate({ geminiTtsModel: v })} />
         </div>
       </div>
     </Card>

@@ -76,7 +76,7 @@ Mode baru = folder baru + satu entri di daftar mode. Tidak ada mode lain yang di
 
 Ini yang membedakan YouFarm dari generator video biasa: produksi berskala, bukan satu video lalu selesai.
 
-- **Batch queue**: masukkan banyak ide sekaligus (mis. 20). Render berjalan satu per satu di latar dan dilanjutkan setelah aplikasi dibuka lagi.
+- **Batch queue** (Antrean > Produksi): masukkan banyak topik sekaligus (satu per baris). Video dibuat satu per satu di latar, dilanjutkan setelah aplikasi dibuka lagi, dan bisa langsung masuk antrean upload di jam tayang channel.
 - **Channel / project**: tiap channel punya niche, suara, gaya caption, dan jadwal sendiri. Contoh: channel A (fakta unik, suara pria, caption kuning, tayang 07.00 dan 19.00) terpisah dari channel B (kids, suara ceria).
 - **Template**: simpan setelan satu niche sekali, pakai ulang.
 - **Auto-ide**: "buatkan N ide" dengan daftar `avoid` berisi ide yang pernah dipakai, supaya tidak berulang.

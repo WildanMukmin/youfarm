@@ -34,7 +34,7 @@ export default function SettingsView() {
     >
       <ScrollArea className="p-6">
         {settings && status ? (
-          <div className="mx-auto grid max-w-6xl items-start gap-5 lg:grid-cols-2">
+          <div className="mx-auto grid max-w-6xl grid-cols-[repeat(auto-fit,minmax(340px,1fr))] items-start gap-5">
             {tab === 'general' ? (
               <>
                 <StorageCard settings={settings} onUpdate={(p) => void update(p)} />
