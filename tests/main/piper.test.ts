@@ -20,7 +20,9 @@ test('listPiperVoices dan pickVoice: hanya model lengkap, pilih sesuai bahasa', 
   const v = listPiperVoices(dir)
   assert.deepEqual(v.map((x) => [x.name, x.lang]), [['en_US-b-medium', 'en'], ['id_ID-a-medium', 'id']])
   assert.equal(pickVoice(v, 'id')?.name, 'id_ID-a-medium')
-  assert.equal(pickVoice(v, 'id', 'en_US-b-medium')?.name, 'en_US-b-medium')
+  // Suara pilihan dari bahasa lain diabaikan supaya naskah tidak dibaca dengan suara bahasa yang salah.
+  assert.equal(pickVoice(v, 'id', 'en_US-b-medium')?.name, 'id_ID-a-medium')
+  assert.equal(pickVoice(v, 'en', 'en_US-b-medium')?.name, 'en_US-b-medium')
   assert.equal(pickVoice(v, 'fr'), null)
   assert.deepEqual(listPiperVoices(join(dir, 'tidak-ada')), [])
 })

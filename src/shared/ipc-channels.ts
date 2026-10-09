@@ -14,6 +14,7 @@ export const IPC = {
   secretsClear: 'secrets:clear',
   dialogSelectFolder: 'dialog:select-folder',
   aiGeminiModels: 'ai:gemini-models',
+  aiGroqModels: 'ai:groq-models',
   ytStatus: 'youtube:status',
   ytSetCredentials: 'youtube:set-credentials',
   ytConnect: 'youtube:connect',
@@ -42,7 +43,8 @@ export const IPC = {
   modeProgress: 'mode:progress',
   modeVoices: 'mode:voices',
   modeOpen: 'mode:open',
-  modeEnqueue: 'mode:enqueue'
+  modeEnqueue: 'mode:enqueue',
+  modeSuggestTopics: 'mode:suggest-topics'
 } as const
 
 export interface AppInfo {
@@ -72,9 +74,16 @@ export interface ModeRunResult {
   warnings: string[]
 }
 
+/** Suara yang tergantung instalasi lokal. Suara cloud (Gemini, Deepgram) ada di src/shared/languages.ts. */
 export interface VoiceCatalog {
   piper: { name: string; lang: string }[]
-  gemini: string[]
+}
+
+export interface SuggestTopicsRequest {
+  mode: string
+  /** Niche yang sudah diketik pengguna; kosong = saran bebas. */
+  seed: string
+  language: string
 }
 
 export interface EnqueueJobRequest {

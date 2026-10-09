@@ -13,9 +13,9 @@ import Notice from '@/ui/Notice'
 import Select from '@/ui/Select'
 
 const PRIVACY: { value: Privacy; label: string }[] = [
-  { value: 'private', label: 'Pribadi' },
+  { value: 'public', label: 'Publik' },
   { value: 'unlisted', label: 'Tidak terdaftar' },
-  { value: 'public', label: 'Publik' }
+  { value: 'private', label: 'Pribadi' }
 ]
 
 interface Props {
@@ -29,7 +29,7 @@ export default function PublishPanel({ result, onOpenQueue, onOpenAccounts }: Pr
   const [accounts, setAccounts] = useState<YoutubeAccountInfo[] | null>(null)
   const { snapshot } = useQueue()
   const [channelId, setChannelId] = useState('')
-  const [privacy, setPrivacy] = useState<Privacy>('private')
+  const [privacy, setPrivacy] = useState<Privacy>('public')
   const [schedule, setSchedule] = useState(true)
   const [busy, setBusy] = useState(false)
   const [queued, setQueued] = useState<{ publishAt: string | null } | null>(null)
@@ -102,8 +102,8 @@ export default function PublishPanel({ result, onOpenQueue, onOpenAccounts }: Pr
         label="Jadwalkan di slot tayang berikutnya"
         hint={
           channel
-            ? `Jam tayang channel ini: ${channel.slots.map(formatClock).join(', ')}. Diunggah sebagai pribadi lalu tayang otomatis.`
-            : 'Video diunggah sebagai pribadi lalu tayang otomatis di jam tayang channel.'
+            ? `Jam tayang channel ini: ${channel.slots.map(formatClock).join(', ')}. Tayang publik otomatis di jam berikutnya yang kosong.`
+            : 'Video tayang publik otomatis di jam tayang channel.'
         }
         checked={schedule}
         onChange={(e) => setSchedule(e.target.checked)}

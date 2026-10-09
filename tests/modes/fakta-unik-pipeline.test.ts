@@ -7,13 +7,13 @@ import { join } from 'node:path'
 import { runFaktaUnik, searchQueries, wrapForThumbnail, type PipelineDeps, type Progress } from '../../src/main/modes/fakta-unik/pipeline.ts'
 import { createFfmpeg } from '../../src/main/platform/ffmpeg.ts'
 import { createPiper, pickVoice } from '../../src/main/platform/voice/piper.ts'
-import type { StockVideo } from '../../src/main/platform/ai/pexels-client.ts'
+import { StockError, type StockClient, type StockVideo } from '../../src/main/platform/ai/stock.ts'
 
 const ROOT = join(import.meta.dirname, '../..')
 const BIN = join(ROOT, 'binaries/win-x64')
 const PIPER_DIR = join(BIN, 'piper')
 const MODELS = join(ROOT, 'models/piper')
-const FONT = join(ROOT, 'assets/fonts/caption/Poppins-Bold.ttf')
+const FONTS = join(ROOT, 'assets/fonts/caption')
 const hasFfmpeg = existsSync(join(BIN, 'ffmpeg.exe'))
 const hasPiper = existsSync(join(PIPER_DIR, 'piper.exe')) && existsSync(join(MODELS, 'id_ID-news_tts-medium.onnx'))
 const skip = hasFfmpeg ? false : 'ffmpeg belum terpasang (npm run setup:ffmpeg)'
@@ -34,7 +34,7 @@ async function setup(over: Partial<PipelineDeps> & { llm?: PipelineDeps['llm'] }
   const ff = createFfmpeg(BIN)
   const dir = mkdtempSync(join(tmpdir(), 'yf-pipe-'))
 
-  // Footage palsu vertikal dengan lama berbeda, disajikan lewat "Pexels" palsu.
+  // Footage palsu vertikal dengan lama berbeda, disajikan lewat penyedia stock palsu.
   const clips: string[] = []
   for (let i = 0; i < 4; i++) {
     const p = join(dir, `src${i}.mp4`)
@@ -43,14 +43,15 @@ async function setup(over: Partial<PipelineDeps> & { llm?: PipelineDeps['llm'] }
   }
   let nextId = 1
   const searches: string[] = []
-  const stock: PipelineDeps['stock'] = {
+  const sources: string[] = []
+  const client: StockClient = {
     async search(q) {
       searches.push(q)
       const id = nextId++
       return [{ id, duration: 2 + (id % 4), width: 540, height: 960, fileUrl: `${id}`, pageUrl: '' } satisfies StockVideo]
     },
     async download(v, cacheDir) {
-      const dest = join(cacheDir, `pexels-${v.id}.mp4`)
+      const dest = join(cacheDir, `stock-${v.id}.mp4`)
       await import('node:fs/promises').then((fs) => fs.mkdir(cacheDir, { recursive: true }))
       await copyFile(clips[v.id % clips.length], dest)
       return dest
@@ -68,10 +69,10 @@ async function setup(over: Partial<PipelineDeps> & { llm?: PipelineDeps['llm'] }
   const events: Progress[] = []
   const deps: PipelineDeps = {
     llm: async () => SCRIPT,
-    stock,
+    stock: (source) => (sources.push(source), client),
     speak,
     ffmpeg: ff,
-    fontFile: FONT,
+    fontsDir: FONTS,
     cacheDir: join(dir, 'cache'),
     workDir: join(dir, 'work'),
     outDir: join(dir, 'out'),
@@ -79,7 +80,7 @@ async function setup(over: Partial<PipelineDeps> & { llm?: PipelineDeps['llm'] }
     onProgress: (p) => events.push(p),
     ...over
   }
-  return { deps, events, searches, dir }
+  return { deps, events, searches, sources, client, dir }
 }
 
 test('searchQueries dan wrapForThumbnail (murni)', () => {
@@ -89,13 +90,16 @@ test('searchQueries dan wrapForThumbnail (murni)', () => {
 })
 
 test('pipeline lengkap: ide jadi video 9:16 dengan caption, SRT, dan thumbnail', { skip }, async () => {
-  const { deps, events, searches } = await setup()
+  const { deps, events, searches, sources } = await setup()
   const r = await runFaktaUnik({ topic: 'fakta laut dalam', language: 'id' }, deps)
 
   assert.equal(r.video.mode, 'fakta-unik')
   assert.equal(r.video.aspect, '9:16')
   assert.equal(r.video.title, SCRIPT.title)
   assert.equal(r.video.syntheticMedia, true)
+  // Penyedia bawaan Pixabay, dan kreditnya ikut ke hasil.
+  assert.deepEqual(sources, ['pixabay'])
+  assert.deepEqual(r.video.credits, ['Footage: Pixabay (pixabay.com)'])
   assert.ok(existsSync(r.video.filePath) && statSync(r.video.filePath).size > 10_000)
   assert.deepEqual(await deps.ffmpeg.size(r.video.filePath), { width: 1080, height: 1920 })
 
@@ -139,15 +143,32 @@ test('pipeline: JSON AI rusak diulang sekali; gagal dua kali memberi error jelas
 
 test('pipeline: tanpa footage sama sekali gagal jelas; sebagian kosong memakai ulang footage', { skip }, async () => {
   const none = await setup()
-  none.deps.stock = { search: async () => [], download: none.deps.stock.download }
+  none.deps.stock = () => ({ search: async () => [], download: none.client.download })
   await assert.rejects(runFaktaUnik({ topic: 'fakta laut' }, none.deps), /Tidak menemukan footage/)
 
+  // Kata kunci yang ditolak penyedia ('bad') dilewati seperti hasil kosong; Pexels dipilih lewat opsi.
   const some = await setup()
-  const realSearch = some.deps.stock.search
-  some.deps.stock = { search: async (q, s) => (/pressure/.test(q) ? [] : realSearch(q, s)), download: some.deps.stock.download }
-  const r = await runFaktaUnik({ topic: 'fakta laut' }, some.deps)
+  const picked: string[] = []
+  some.deps.stock = (source) => {
+    picked.push(source)
+    return {
+      search: async (q, s) => {
+        if (/pressure/.test(q)) throw new StockError('bad', 'ditolak')
+        return some.client.search(q, s)
+      },
+      download: some.client.download
+    }
+  }
+  const r = await runFaktaUnik({ topic: 'fakta laut', stockSource: 'pexels' }, some.deps)
   assert.ok(r.warnings.some((w) => /Kalimat 2 memakai ulang/.test(w)))
   assert.ok(existsSync(r.video.filePath))
+  assert.deepEqual(picked, ['pexels'])
+  assert.deepEqual(r.video.credits, ['Footage: Pexels (pexels.com)'])
+
+  // Key ditolak tetap menggagalkan, tidak diam-diam memakai ulang footage.
+  const denied = await setup()
+  denied.deps.stock = () => ({ search: async () => { throw new StockError('key', 'Key Pixabay ditolak.') }, download: denied.client.download })
+  await assert.rejects(runFaktaUnik({ topic: 'fakta laut' }, denied.deps), /Key Pixabay ditolak/)
 })
 
 test('pipeline: opsi tidak valid ditolak sebelum memanggil AI; pembatalan menghentikan dan membersihkan', { skip }, async () => {

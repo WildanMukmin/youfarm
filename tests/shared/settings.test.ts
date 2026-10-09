@@ -9,7 +9,7 @@ import {
   type SecretStatus
 } from '../../src/shared/settings.ts'
 
-const none: SecretStatus = { gemini: false, groq: false, deepgram: false, pexels: false, elevenlabs: false }
+const none: SecretStatus = { gemini: false, groq: false, deepgram: false, pixabay: false, pexels: false, elevenlabs: false }
 
 test('mergeSettings menerima nilai valid dan mengabaikan yang tidak valid', () => {
   const s = mergeSettings(DEFAULT_SETTINGS, { theme: 'light', textProvider: 'openai', bitrateKbps: 8000, evil: 1 })

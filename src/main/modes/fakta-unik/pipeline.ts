@@ -1,4 +1,4 @@
-import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises'
+import { copyFile, cp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { RenderedVideo } from '../../../shared/contracts/modes.ts'
 import {
@@ -10,8 +10,9 @@ import {
   type FaktaUnikOptions
 } from '../../../shared/modes/fakta-unik.ts'
 import type { Ffmpeg } from '../../platform/ffmpeg.ts'
-import { pickVideo, type PexelsClient } from '../../platform/ai/pexels-client.ts'
-import { buildCues, toAss, toSrt, type SentenceTiming } from './captions.ts'
+import { STOCK_INFO, type StockSource } from '../../../shared/stock.ts'
+import { StockError, pickVideo, type StockClient } from '../../platform/ai/stock.ts'
+import { buildChunks, toAss, toSrt, type SentenceTiming } from './captions.ts'
 import { buildRenderArgs, HEIGHT, WIDTH, type ClipSegment } from './render.ts'
 
 export type Stage = 'script' | 'voice' | 'visual' | 'render' | 'thumbnail' | 'done'
@@ -25,12 +26,13 @@ export interface Progress {
 
 export interface PipelineDeps {
   llm: (p: { system: string; user: string; signal?: AbortSignal }) => Promise<unknown>
-  stock: Pick<PexelsClient, 'search' | 'download'>
+  /** Klien footage untuk penyedia yang dipilih di opsi. */
+  stock: (source: StockSource) => StockClient
   /** Ucapkan satu kalimat ke berkas WAV. */
   speak: (p: { text: string; out: string; options: FaktaUnikOptions; signal?: AbortSignal }) => Promise<void>
   ffmpeg: Ffmpeg
-  /** Folder font yang berisi TTF untuk caption (berisi `fontFile`). */
-  fontFile: string
+  /** Folder TTF caption yang dibundel (assets/fonts/caption); disalin ke folder kerja untuk ffmpeg. */
+  fontsDir: string
   /** Folder cache footage (dipakai ulang antar video). */
   cacheDir: string
   /** Folder kerja sementara. */
@@ -157,6 +159,7 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
 
     // 3. Footage per kalimat.
     const durations = speech.map((s, i) => s + pads[i])
+    const stock = deps.stock(options.stockSource)
     const used = new Set<number>()
     const segments: ClipSegment[] = []
     for (let i = 0; i < n; i++) {
@@ -164,10 +167,18 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
       report('visual', 32 + Math.round((i / n) * 28), `Mencari footage ${i + 1}/${n}…`)
       let path: string | null = null
       for (const q of searchQueries(script.sentences[i].keywords)) {
-        const found = pickVideo(await deps.stock.search(q, signal), { neededSec: durations[i], used })
+        let results
+        try {
+          results = await stock.search(q, signal)
+        } catch (e) {
+          // Kata kunci yang ditolak penyedia cukup dilewati; key salah atau batas permintaan tetap menggagalkan.
+          if (e instanceof StockError && e.kind === 'bad') continue
+          throw e
+        }
+        const found = pickVideo(results, { neededSec: durations[i], used })
         if (found) {
           used.add(found.id)
-          path = await deps.stock.download(found, deps.cacheDir, signal)
+          path = await stock.download(found, deps.cacheDir, signal)
           break
         }
       }
@@ -189,12 +200,12 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
       t += speech[i] + pads[i]
       return timing
     })
-    const cues = buildCues(timings)
-    await copyFile(deps.fontFile, join(job, 'fonts', 'Poppins-Bold.ttf'))
-    await writeFile(join(job, 'captions.ass'), toAss(cues, options.captionStyle))
+    const chunks = buildChunks(timings, options.language, options.caption.wordsPerChunk)
+    await cp(deps.fontsDir, join(job, 'fonts'), { recursive: true, filter: (src) => !/\.txt$/i.test(src) })
+    await writeFile(join(job, 'captions.ass'), toAss(chunks, options.caption, options.language))
     const base = `${slug(script.title)}-${stamp}`
     const srtPath = join(deps.outDir, `${base}.srt`)
-    await writeFile(srtPath, toSrt(cues), 'utf8')
+    await writeFile(srtPath, toSrt(chunks, options.language), 'utf8')
 
     // 5. Render.
     report('render', 62, 'Merender video…')
@@ -236,7 +247,8 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
         script: script.sentences.map((s) => s.text).join(' '),
         // Narasi dibuat oleh suara AI, jadi ditandai sintetis.
         syntheticMedia: true,
-        language: options.language
+        language: options.language,
+        credits: [STOCK_INFO[options.stockSource].credit]
       }
     }
   } finally {

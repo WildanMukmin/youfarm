@@ -27,6 +27,8 @@ export interface RenderedVideo {
   /** True bila ada suara, gambar, atau video buatan AI yang realistis. */
   syntheticMedia: boolean
   language: string
+  /** Baris kredit sumber (mis. footage stock) untuk deskripsi. Hasil lama belum punya. */
+  credits?: string[]
 }
 
 /**

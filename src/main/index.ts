@@ -16,7 +16,7 @@ const BG = '#0B0709'
 function isolateTestProfile(): void {
   if (app.isPackaged) return
   const explicit = process.env['YOUFARM_USER_DATA']
-  const testing = ['YOUFARM_FAKE_GOOGLE', 'YOUFARM_FAKE_GEMINI', 'YOUFARM_FAKE_PEXELS', 'YOUFARM_DEV_ENQUEUE', 'YOUFARM_AUTH_URL_FILE'].some((k) => process.env[k])
+  const testing = ['YOUFARM_FAKE_GOOGLE', 'YOUFARM_FAKE_GEMINI', 'YOUFARM_FAKE_PEXELS', 'YOUFARM_FAKE_PIXABAY', 'YOUFARM_FAKE_GROQ', 'YOUFARM_FAKE_DEEPGRAM', 'YOUFARM_DEV_ENQUEUE', 'YOUFARM_AUTH_URL_FILE'].some((k) => process.env[k])
   if (explicit) app.setPath('userData', explicit)
   else if (testing) app.setPath('userData', join(app.getPath('appData'), 'youfarm-test'))
 }

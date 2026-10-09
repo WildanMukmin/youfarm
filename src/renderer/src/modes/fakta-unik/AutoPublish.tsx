@@ -13,7 +13,7 @@ export interface AutoPublishState {
   schedule: boolean
 }
 
-export const DEFAULT_AUTO_PUBLISH: AutoPublishState = { enabled: false, channelId: '', privacy: 'private', schedule: true }
+export const DEFAULT_AUTO_PUBLISH: AutoPublishState = { enabled: false, channelId: '', privacy: 'public', schedule: true }
 
 /** Rencana publikasi untuk antrean produksi, atau null bila tidak diunggah otomatis / belum lengkap. */
 export function toPlan(s: AutoPublishState): PublishPlan | null {
@@ -69,15 +69,15 @@ export default function AutoPublish({ value, onChange, onOpenAccounts }: Props) 
           </Select>
           <Checkbox
             label="Tayang di jam tayang channel"
-            hint={channel ? `${channel.slots.map(formatClock).join(', ')} · diunggah pribadi lalu tayang otomatis` : undefined}
+            hint={channel ? `${channel.slots.map(formatClock).join(', ')} · tayang publik otomatis di jam itu` : undefined}
             checked={value.schedule}
             onChange={(e) => onChange({ ...value, schedule: e.target.checked })}
           />
           {!value.schedule && (
             <Select label="Privasi" value={value.privacy} onChange={(e) => onChange({ ...value, privacy: e.target.value as Privacy })}>
-              <option value="private">Pribadi</option>
-              <option value="unlisted">Tidak terdaftar</option>
               <option value="public">Publik</option>
+              <option value="unlisted">Tidak terdaftar</option>
+              <option value="private">Pribadi</option>
             </Select>
           )}
         </>

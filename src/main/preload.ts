@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { EnqueueRequest } from '@shared/youtube/queue'
 import type { ProductionEnqueueRequest, ProductionSnapshot } from '@shared/production'
+import type { TopicSuggestion } from '@shared/modes/fakta-unik'
 import {
   IPC,
   type AppInfo,
@@ -8,6 +9,7 @@ import {
   type EnqueueJobResult,
   type ModeProgress,
   type ModeRunResult,
+  type SuggestTopicsRequest,
   type VoiceCatalog,
   type QueueSnapshot,
   type SecretKey,
@@ -27,7 +29,8 @@ const api = {
     selectFolder: (): Promise<string | null> => ipcRenderer.invoke(IPC.dialogSelectFolder)
   },
   ai: {
-    geminiModels: (): Promise<string[]> => ipcRenderer.invoke(IPC.aiGeminiModels)
+    geminiModels: (): Promise<string[]> => ipcRenderer.invoke(IPC.aiGeminiModels),
+    groqModels: (): Promise<string[]> => ipcRenderer.invoke(IPC.aiGroqModels)
   },
   secrets: {
     status: (): Promise<SecretStatus> => ipcRenderer.invoke(IPC.secretsStatus),
@@ -51,6 +54,7 @@ const api = {
     voices: (): Promise<VoiceCatalog> => ipcRenderer.invoke(IPC.modeVoices),
     open: (jobId: string, what: 'file' | 'folder'): Promise<void> => ipcRenderer.invoke(IPC.modeOpen, jobId, what),
     enqueue: (req: EnqueueJobRequest): Promise<EnqueueJobResult> => ipcRenderer.invoke(IPC.modeEnqueue, req),
+    suggestTopics: (req: SuggestTopicsRequest): Promise<TopicSuggestion[]> => ipcRenderer.invoke(IPC.modeSuggestTopics, req),
     /** Dengar progres semua job. Mengembalikan fungsi untuk berhenti mendengar. */
     onProgress: (cb: (p: ModeProgress) => void): (() => void) => {
       const handler = (_e: unknown, p: ModeProgress): void => cb(p)

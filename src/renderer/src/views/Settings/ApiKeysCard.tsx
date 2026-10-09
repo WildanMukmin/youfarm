@@ -9,9 +9,10 @@ import StatusChip from '@/ui/StatusChip'
 
 const KEYS: { id: SecretKey; label: string; hint: string }[] = [
   { id: 'gemini', label: 'Gemini', hint: 'Naskah, suara, analisis video' },
-  { id: 'groq', label: 'Groq', hint: 'Naskah dan transkripsi' },
-  { id: 'deepgram', label: 'Deepgram', hint: 'Transkripsi dan suara' },
-  { id: 'pexels', label: 'Pexels', hint: 'Footage stock' },
+  { id: 'groq', label: 'Groq', hint: 'Naskah dan saran topik (alternatif Gemini)' },
+  { id: 'deepgram', label: 'Deepgram', hint: 'Suara narasi (Inggris dan 6 bahasa lain)' },
+  { id: 'pixabay', label: 'Pixabay', hint: 'Footage stock (utama)' },
+  { id: 'pexels', label: 'Pexels', hint: 'Footage stock (alternatif)' },
   { id: 'elevenlabs', label: 'ElevenLabs', hint: 'Suara narasi' }
 ]
 

@@ -3,20 +3,23 @@
  * dan pipeline di main. Mode lain tidak boleh mengimpor file ini.
  */
 
+import { CAPTION_TEMPLATES, DEFAULT_CAPTION, sanitizeCaption, type CaptionStyle } from '../captions.ts'
+import { LANGUAGE_CODES, VOICE_SOURCES, languageInfo, speechUnits, type LanguageCode, type VoiceSource } from '../languages.ts'
+import { STOCK_SOURCES } from '../stock.ts'
+
 export const TARGET_SECONDS = [30, 45, 60] as const
-export const LANGUAGES = ['id', 'en'] as const
-export const VOICE_SOURCES = ['piper', 'gemini-tts'] as const
-export const CAPTION_STYLES = ['kuning-tebal', 'putih-bersih', 'kotak-gelap'] as const
 
 export interface FaktaUnikOptions {
   /** Topik atau niche, mis. "fakta aneh tentang laut dalam". */
   topic: string
-  language: (typeof LANGUAGES)[number]
+  language: LanguageCode
   targetSec: (typeof TARGET_SECONDS)[number]
-  voiceSource: (typeof VOICE_SOURCES)[number]
-  /** Nama suara (Gemini: mis. "Kore"; Piper: nama model). Kosong = bawaan. */
+  voiceSource: VoiceSource
+  /** ID suara (Gemini: mis. "Kore"; Deepgram: "aura-2-thalia-en"; Piper: nama model). Kosong = bawaan. */
   voiceName: string
-  captionStyle: (typeof CAPTION_STYLES)[number]
+  caption: CaptionStyle
+  /** Penyedia footage stock. */
+  stockSource: (typeof STOCK_SOURCES)[number]
   /** Topik yang sudah pernah dipakai, supaya tidak berulang. */
   avoid: string[]
 }
@@ -27,7 +30,8 @@ export const DEFAULT_OPTIONS: FaktaUnikOptions = {
   targetSec: 45,
   voiceSource: 'piper',
   voiceName: '',
-  captionStyle: 'kuning-tebal',
+  caption: DEFAULT_CAPTION,
+  stockSource: 'pixabay',
   avoid: []
 }
 
@@ -45,7 +49,12 @@ export interface FaktaScript {
   tags: string[]
 }
 
-const WORDS_PER_SEC: Record<FaktaUnikOptions['language'], number> = { id: 2.6, en: 2.5 }
+/** Antrean lama menyimpan gaya caption sebagai nama preset (`captionStyle`); ubah ke gaya lengkap. */
+function captionFrom(o: Record<string, unknown>): CaptionStyle {
+  if (typeof o.caption === 'object' && o.caption !== null) return sanitizeCaption(o.caption)
+  const legacy = CAPTION_TEMPLATES.find((t) => t.id === o.captionStyle)
+  return legacy ? legacy.style : DEFAULT_CAPTION
+}
 
 export function validateOptions(input: unknown): FaktaUnikOptions {
   const o = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>
@@ -58,38 +67,39 @@ export function validateOptions(input: unknown): FaktaUnikOptions {
 
   return {
     topic,
-    language: pick(LANGUAGES, o.language, DEFAULT_OPTIONS.language),
+    language: pick(LANGUAGE_CODES, o.language, DEFAULT_OPTIONS.language),
     targetSec: pick(TARGET_SECONDS, o.targetSec, DEFAULT_OPTIONS.targetSec),
     voiceSource: pick(VOICE_SOURCES, o.voiceSource, DEFAULT_OPTIONS.voiceSource),
     voiceName: typeof o.voiceName === 'string' ? o.voiceName.trim().slice(0, 80) : '',
-    captionStyle: pick(CAPTION_STYLES, o.captionStyle, DEFAULT_OPTIONS.captionStyle),
+    caption: captionFrom(o),
+    stockSource: pick(STOCK_SOURCES, o.stockSource, DEFAULT_OPTIONS.stockSource),
     avoid: Array.isArray(o.avoid) ? o.avoid.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean).slice(0, 50) : []
   }
 }
 
-export const wordCount = (s: string): number => s.trim().split(/\s+/).filter(Boolean).length
-
-/** Perkiraan jumlah kata yang pas untuk durasi target. */
-export function targetWords(o: Pick<FaktaUnikOptions, 'language' | 'targetSec'>): number {
-  return Math.round(WORDS_PER_SEC[o.language] * o.targetSec)
+/** Perkiraan panjang naskah yang pas untuk durasi target, dalam satuan bahasanya (kata atau karakter). */
+export function targetLength(o: Pick<FaktaUnikOptions, 'language' | 'targetSec'>): { amount: number; unit: 'kata' | 'karakter' } {
+  const lang = languageInfo(o.language)
+  return { amount: Math.round(lang.rate * o.targetSec), unit: lang.unit === 'char' ? 'karakter' : 'kata' }
 }
 
-const LANG_NAME = { id: 'Bahasa Indonesia', en: 'English' } as const
-
 export function buildScriptPrompt(o: FaktaUnikOptions): { system: string; user: string } {
-  const words = targetWords(o)
+  const lang = languageInfo(o.language)
+  const len = targetLength(o)
+  const perSentence = lang.unit === 'char' ? '12 sampai 45 karakter' : '6 sampai 22 kata'
   const system = [
     'Kamu penulis naskah video pendek vertikal "fakta unik" untuk YouTube Shorts.',
     'Tulis naskah yang akurat, menarik, dan orisinal. Jangan mengarang angka atau klaim yang tidak pasti; bila ragu, pilih fakta lain.',
     'Kalimat pertama adalah hook yang membuat penonton bertahan. Kalimat terakhir menutup dengan kesan kuat, tanpa meminta like atau subscribe.',
+    `Tulis judul, kalimat naskah, deskripsi, dan tag dalam ${lang.promptName}, dengan gaya bertutur yang alami bagi penutur aslinya.`,
     'Keluaran HANYA JSON valid sesuai skema, tanpa teks lain.'
   ].join(' ')
 
   const avoid = o.avoid.length ? `\nJangan membahas hal yang sudah pernah dipakai: ${o.avoid.map((a) => `"${a}"`).join(', ')}.` : ''
   const user = [
     `Topik: ${o.topic}`,
-    `Bahasa naskah: ${LANG_NAME[o.language]}.`,
-    `Total sekitar ${words} kata (target ${o.targetSec} detik), dibagi 6 sampai 10 kalimat. Tiap kalimat 6 sampai 22 kata, mudah diucapkan.`,
+    `Bahasa naskah: ${lang.promptName}.`,
+    `Total sekitar ${len.amount} ${len.unit} (target ${o.targetSec} detik), dibagi 6 sampai 10 kalimat. Tiap kalimat ${perSentence}, mudah diucapkan.`,
     'Untuk tiap kalimat beri 2 sampai 3 kata kunci visual dalam bahasa Inggris untuk mencari footage stock: benda atau pemandangan yang konkret dan bisa difilmkan, bukan konsep abstrak.',
     avoid,
     '',
@@ -102,6 +112,56 @@ export function buildScriptPrompt(o: FaktaUnikOptions): { system: string; user: 
     .filter((l) => l !== '')
     .join('\n')
   return { system, user }
+}
+
+/* ---- Saran topik ---- */
+
+export const SUGGESTION_COUNT = 8
+
+/**
+ * Minta AI menyarankan topik Fakta Unik. Dengan `seed` (niche yang diketik pengguna) saran berupa topik spesifik
+ * di dalam niche itu; tanpa seed, saran berupa campuran niche yang laku untuk Shorts.
+ */
+export function buildTopicPrompt(p: { seed: string; language: string; avoid: string[] }): { system: string; user: string } {
+  const lang = languageInfo(p.language)
+  const seed = p.seed.replace(/\s+/g, ' ').trim().slice(0, 200)
+  const system = [
+    'Kamu riset konten untuk channel YouTube Shorts "fakta unik" yang dibuat otomatis dari footage stock dan narasi.',
+    'Sarankan topik yang membuat penasaran, faktual (bisa diverifikasi), aman untuk iklan, dan mudah divisualkan dengan footage stock umum.',
+    'Hindari topik politik, SARA, tragedi baru, kesehatan yang menyesatkan, dan tokoh hidup.',
+    'Keluaran HANYA JSON valid sesuai skema, tanpa teks lain.'
+  ].join(' ')
+  const user = [
+    seed ? `Niche: ${seed}. Sarankan ${SUGGESTION_COUNT} topik spesifik di dalam niche ini, masing-masing cukup untuk satu video 30 sampai 60 detik.` : `Sarankan ${SUGGESTION_COUNT} topik dari niche yang beragam dan sedang diminati penonton Shorts.`,
+    `Tulis topik dalam ${lang.promptName}, singkat (3 sampai 9 kata), tanpa nomor dan tanpa tanda kutip.`,
+    p.avoid.length ? `Jangan mengulang yang sudah dipakai: ${p.avoid.slice(0, 40).map((a) => `"${a}"`).join(', ')}.` : '',
+    'Skema JSON: {"topics": [{"topic": string, "why": string (alasan singkat kenapa menarik, maks 12 kata)}]}'
+  ]
+    .filter(Boolean)
+    .join('\n')
+  return { system, user }
+}
+
+export interface TopicSuggestion {
+  topic: string
+  why: string
+}
+
+export function parseTopics(json: unknown): TopicSuggestion[] {
+  const list = (json as { topics?: unknown })?.topics
+  if (!Array.isArray(list)) throw new Error('AI tidak memberi daftar topik.')
+  const seen = new Set<string>()
+  const out: TopicSuggestion[] = []
+  for (const item of list) {
+    const r = (typeof item === 'string' ? { topic: item } : typeof item === 'object' && item !== null ? item : {}) as Record<string, unknown>
+    // Buang penomoran daftar ("1. ", "- ") dan tanda kutip, tapi biarkan angka yang bagian dari topik ("7 keajaiban").
+    const topic = clean(r.topic).replace(/^(?:\d+[.)]\s+|[-•*]\s+)/, '').replace(/^["'“”]+|["'“”]+$/g, '').trim().slice(0, 120)
+    if (topic.length < 3 || seen.has(topic.toLowerCase())) continue
+    seen.add(topic.toLowerCase())
+    out.push({ topic, why: clean(r.why).slice(0, 140) })
+  }
+  if (out.length === 0) throw new Error('AI tidak memberi topik yang bisa dipakai. Coba lagi.')
+  return out.slice(0, SUGGESTION_COUNT)
 }
 
 const clean = (s: unknown): string => (typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : '')
@@ -128,17 +188,14 @@ export function parseScript(json: unknown): FaktaScript {
   return { title, sentences, description: clean(j.description), tags }
 }
 
-/** Naskah dianggap pas bila jumlah katanya dalam ±40% target. Hanya peringatan, bukan penolakan. */
+/** Naskah dianggap pas bila panjangnya dalam ±40% target. Hanya peringatan, bukan penolakan. */
 export function scriptLengthWarning(script: FaktaScript, o: Pick<FaktaUnikOptions, 'language' | 'targetSec'>): string | null {
-  const words = script.sentences.reduce((n, s) => n + wordCount(s.text), 0)
-  const target = targetWords(o)
-  if (words < target * 0.6) return `Naskah agak pendek (${words} kata, target sekitar ${target}).`
-  if (words > target * 1.4) return `Naskah agak panjang (${words} kata, target sekitar ${target}).`
+  const got = script.sentences.reduce((n, s) => n + speechUnits(s.text, o.language), 0)
+  const { amount, unit } = targetLength(o)
+  if (got < amount * 0.6) return `Naskah agak pendek (${got} ${unit}, target sekitar ${amount}).`
+  if (got > amount * 1.4) return `Naskah agak panjang (${got} ${unit}, target sekitar ${amount}).`
   return null
 }
-
-/** Suara bawaan Gemini TTS yang ditawarkan di form (daftar lengkap ada di dokumentasi Gemini). */
-export const GEMINI_VOICES = ['Kore', 'Puck', 'Charon', 'Zephyr', 'Fenrir', 'Leda', 'Aoede', 'Orus'] as const
 
 /** Kategori YouTube bawaan mode ini (Education). */
 export const DEFAULT_CATEGORY_ID = '27'

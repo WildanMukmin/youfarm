@@ -24,7 +24,7 @@ export function listPiperVoices(modelsDir: string): PiperVoice[] {
 
 /** Suara yang diminta bila ada; bila tidak, suara pertama untuk bahasa itu. */
 export function pickVoice(voices: PiperVoice[], lang: string, preferred?: string): PiperVoice | null {
-  return voices.find((v) => v.name === preferred) ?? voices.find((v) => v.lang === lang) ?? null
+  return voices.find((v) => v.name === preferred && v.lang === lang) ?? voices.find((v) => v.lang === lang) ?? null
 }
 
 export interface Piper {

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Check } from 'lucide-react'
 import type { JobStage as Stage } from '@shared/ipc-channels'
 import { mediaUrl } from '@shared/media'
@@ -24,6 +25,8 @@ interface Props {
   onOpen: (what: 'file' | 'folder') => void
   /** Teks di bingkai kosong sebelum ada video. */
   idleHint: string
+  /** Isi bingkai sebelum ada video (mis. pratinjau caption). Tanpa ini bingkai kosong bergaris. */
+  idle?: ReactNode
 }
 
 /** Saat sempit hanya label langkah aktif yang ditampilkan; sisanya cukup nomor. */
@@ -54,7 +57,7 @@ function Stepper({ state, compact }: { state: JobState; compact: boolean }) {
 }
 
 /** Area tengah ruang kerja mode produksi: bingkai 9:16 untuk pratinjau, progres, atau hasil. */
-export default function JobStage({ state, onCancel, onReset, onOpen, idleHint }: Props) {
+export default function JobStage({ state, onCancel, onReset, onOpen, idleHint, idle }: Props) {
   const area = useElementSize()
   return (
     <div ref={area.ref} className="flex min-h-0 flex-1 flex-col">
@@ -86,6 +89,8 @@ export default function JobStage({ state, onCancel, onReset, onOpen, idleHint }:
                 Batal
               </Button>
             </div>
+          ) : idle ? (
+            idle
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 border-2 border-dashed border-line p-6 text-center">
               <span className="font-mono text-xs uppercase tracking-widest text-ink-muted">9:16 · 1080×1920</span>

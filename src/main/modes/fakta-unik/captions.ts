@@ -1,10 +1,5 @@
-import type { FaktaUnikOptions } from '../../../shared/modes/fakta-unik.ts'
-
-export interface Cue {
-  start: number
-  end: number
-  text: string
-}
+import { CAPTION_REF_HEIGHT, CAPTION_REF_WIDTH, CAPTION_SIDE_MARGIN, chunkWords, timeWords, type CaptionChunk, type CaptionStyle } from '../../../shared/captions.ts'
+import { languageInfo, splitWords, wordJoiner } from '../../../shared/languages.ts'
 
 export interface SentenceTiming {
   text: string
@@ -14,50 +9,17 @@ export interface SentenceTiming {
   speechSec: number
 }
 
-/**
- * Pecah kalimat jadi potongan pendek (default maks 3 kata dan 22 karakter) supaya caption
- * terbaca cepat di layar vertikal.
- */
-export function splitCaptionChunks(text: string, maxWords = 3, maxChars = 22): string[] {
-  const words = text.trim().split(/\s+/).filter(Boolean)
-  const chunks: string[] = []
-  let cur: string[] = []
-  for (const w of words) {
-    const next = [...cur, w]
-    if (cur.length > 0 && (next.length > maxWords || next.join(' ').length > maxChars)) {
-      chunks.push(cur.join(' '))
-      cur = [w]
-    } else cur = next
-    // Akhir klausa: potong di tanda baca supaya jeda caption mengikuti jeda ucapan.
-    if (/[.,!?;:]$/.test(w)) {
-      chunks.push(cur.join(' '))
-      cur = []
-    }
-  }
-  if (cur.length) chunks.push(cur.join(' '))
-  return chunks
-}
-
-/** Waktu tiap potongan dibagi sebanding jumlah karakternya dalam rentang ucapan kalimat. */
-export function buildCues(sentences: SentenceTiming[]): Cue[] {
-  const cues: Cue[] = []
-  for (const s of sentences) {
-    const chunks = splitCaptionChunks(s.text)
-    const total = chunks.reduce((n, c) => n + c.length, 0) || 1
-    let t = s.start
-    for (const c of chunks) {
-      const d = (c.length / total) * s.speechSec
-      cues.push({ start: t, end: t + d, text: c })
-      t += d
-    }
-  }
-  return cues
+/** Potongan caption per kalimat (potongan tidak pernah melewati batas kalimat), dengan perkiraan waktu tiap kata. */
+export function buildChunks(sentences: SentenceTiming[], language: string, wordsPerChunk: number): CaptionChunk[] {
+  // Bahasa tanpa spasi: sekitar 4 karakter dianggap satu "kata" untuk pilihan kata per tampilan.
+  const maxChars = languageInfo(language).unit === 'char' ? wordsPerChunk * 4 : undefined
+  return sentences.flatMap((s) => chunkWords(timeWords(splitWords(s.text, language), s.start, s.speechSec), wordsPerChunk, maxChars))
 }
 
 const pad = (n: number, w = 2): string => String(n).padStart(w, '0')
 
 function assTime(sec: number): string {
-  const cs = Math.round(sec * 100)
+  const cs = Math.round(Math.max(0, sec) * 100)
   const h = Math.floor(cs / 360000)
   const m = Math.floor((cs % 360000) / 6000)
   const s = Math.floor((cs % 6000) / 100)
@@ -69,49 +31,102 @@ function srtTime(sec: number): string {
   return `${pad(Math.floor(ms / 3_600_000))}:${pad(Math.floor((ms % 3_600_000) / 60_000))}:${pad(Math.floor((ms % 60_000) / 1000))},${pad(ms % 1000, 3)}`
 }
 
-export function toSrt(cues: Cue[]): string {
-  return cues.map((c, i) => `${i + 1}\n${srtTime(c.start)} --> ${srtTime(c.end)}\n${c.text}\n`).join('\n')
+/** SRT untuk diunggah sebagai track caption YouTube (teks asli, tanpa huruf kapital paksa). */
+export function toSrt(chunks: CaptionChunk[], language: string): string {
+  const join = wordJoiner(language)
+  return chunks.map((c, i) => `${i + 1}\n${srtTime(c.start)} --> ${srtTime(c.end)}\n${c.words.map((w) => w.text).join(join)}\n`).join('\n')
 }
 
-interface StyleSpec {
-  /** Warna ASS dalam format &HAABBGGRR. */
-  primary: string
-  outline: string
-  back: string
-  borderStyle: 1 | 3
-  outlineSize: number
-  upper: boolean
-}
-
-const STYLES: Record<FaktaUnikOptions['captionStyle'], StyleSpec> = {
-  'kuning-tebal': { primary: '&H0000F0FF', outline: '&H00000000', back: '&H80000000', borderStyle: 1, outlineSize: 7, upper: true },
-  'putih-bersih': { primary: '&H00FFFFFF', outline: '&H00000000', back: '&H80000000', borderStyle: 1, outlineSize: 5, upper: false },
-  'kotak-gelap': { primary: '&H00FFFFFF', outline: '&H00101010', back: '&HB0101010', borderStyle: 3, outlineSize: 14, upper: false }
+/** #RRGGBB jadi warna ASS &HAABBGGRR. `opacity` 0 sampai 100. */
+export function assColor(hex: string, opacity = 100): string {
+  const h = hex.replace('#', '')
+  const alpha = Math.round(((100 - opacity) / 100) * 255)
+  return `&H${alpha.toString(16).padStart(2, '0')}${h.slice(4, 6)}${h.slice(2, 4)}${h.slice(0, 2)}`.toUpperCase()
 }
 
 const escapeAss = (s: string): string => s.replace(/\\/g, '＼').replace(/[{}]/g, '').replace(/\r?\n/g, ' ')
 
-/** Berkas ASS 1080x1920. `fontName` harus ada di folder font yang diberikan ke ffmpeg. */
-export function toAss(cues: Cue[], style: FaktaUnikOptions['captionStyle'], fontName = 'Poppins'): string {
-  const s = STYLES[style]
+/** Kata aktif: warna sorot dan/atau zoom singkat, lalu kembali normal untuk kata sesudahnya. */
+function activeWord(text: string, style: CaptionStyle): string {
+  const on: string[] = []
+  const off: string[] = []
+  if (style.highlight) {
+    // Override warna memakai &HBBGGRR& (tanpa alpha).
+    on.push(`\\1c&H${assColor(style.highlightColor).slice(4)}&`)
+    off.push(`\\1c&H${assColor(style.color).slice(4)}&`)
+  }
+  if (style.animation === 'word-zoom') {
+    on.push('\\t(0,90,\\fscx125\\fscy125)\\t(90,180,\\fscx100\\fscy100)')
+    off.push('\\fscx100\\fscy100')
+  }
+  return on.length ? `{${on.join('')}}${text}{${off.join('')}}` : text
+}
+
+/** Efek saat potongan baru muncul. Hanya ditempel di event pertama tiap potongan. */
+function chunkIntro(style: CaptionStyle): string {
+  if (style.animation === 'pop') return '{\\fscx80\\fscy80\\t(0,110,\\fscx106\\fscy106)\\t(110,170,\\fscx100\\fscy100)}'
+  if (style.animation === 'fade') return '{\\fad(160,0)}'
+  return ''
+}
+
+/**
+ * Berkas ASS 1080x1920 dari potongan bertimestamp. Bila kata aktif disorot (warna atau zoom), tiap kata jadi satu
+ * event supaya sorotnya hanya menyala saat kata itu diucapkan. Font harus ada di folder font untuk ffmpeg
+ * atau terpasang di Windows; huruf yang tidak ada diambil libass dari font sistem.
+ */
+export function toAss(chunks: CaptionChunk[], style: CaptionStyle, language: string): string {
+  const W = CAPTION_REF_WIDTH
+  const H = CAPTION_REF_HEIGHT
+  // Kolom selebar frame dikurangi margin tepi; tag pos menaruh titik jangkar di tepi kolom sesuai perataan,
+  // dan MarginL/MarginR event membatasi lebar bungkus baris.
+  const margin = Math.round((CAPTION_SIDE_MARGIN / 100) * W)
+  const anchor = style.align === 'left' ? { an: 4, x: margin } : style.align === 'right' ? { an: 6, x: W - margin } : { an: 5, x: W / 2 }
+  const pos = `{\\an${anchor.an}\\pos(${Math.round(anchor.x)},${Math.round((style.positionY / 100) * H)})}`
+
+  const primary = assColor(style.color)
+  // BorderStyle 3: kotak latar di belakang tiap baris; libass mewarnainya dengan OutlineColour dan
+  // memakai nilai Outline sebagai jarak tepi kotak.
+  const border = style.box
+    ? { style: 3, color: assColor(style.boxColor, style.boxOpacity), size: Math.max(10, Math.round(style.size * 0.18)) }
+    : { style: 1, color: assColor(style.outlineColor), size: style.outline }
+  const shadowColor = assColor('#000000', 55)
+
   const header = [
     '[Script Info]',
     'ScriptType: v4.00+',
-    'PlayResX: 1080',
-    'PlayResY: 1920',
-    'WrapStyle: 2',
+    `PlayResX: ${W}`,
+    `PlayResY: ${H}`,
+    'WrapStyle: 0',
     'ScaledBorderAndShadow: yes',
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    `Style: Default,${fontName},84,${s.primary},${s.primary},${s.outline},${s.back},-1,0,0,0,100,100,0,0,${s.borderStyle},${s.outlineSize},2,2,60,60,520,1`,
+    `Style: Caption,${style.font},${style.size},${primary},${primary},${border.color},${shadowColor},${style.bold ? -1 : 0},0,0,0,100,100,0,0,${border.style},${border.size},${style.shadow},5,${margin},${margin},0,1`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text'
   ]
-  const lines = cues.map((c) => {
-    const text = escapeAss(s.upper ? c.text.toUpperCase() : c.text)
-    return `Dialogue: 0,${assTime(c.start)},${assTime(c.end)},Default,,0,0,0,,${text}`
+
+  const join = wordJoiner(language)
+  const shape = (t: string): string => escapeAss(style.uppercase ? t.toLocaleUpperCase(language) : t)
+  const perWord = style.highlight || style.animation === 'word-zoom'
+  const line = (start: number, end: number, text: string): string => `Dialogue: 0,${assTime(start)},${assTime(end)},Caption,,${margin},${margin},0,,${pos}${text}`
+
+  const events: string[] = []
+  chunks.forEach((c, ci) => {
+    // Potongan tetap tampil sampai potongan berikutnya mulai bila jedanya pendek, supaya caption tidak berkedip.
+    const next = chunks[ci + 1]
+    const chunkEnd = next && next.start - c.end < 0.35 ? next.start : c.end
+    const words = c.words.map((w) => shape(w.text))
+    if (!perWord) {
+      events.push(line(c.start, chunkEnd, chunkIntro(style) + words.join(join)))
+      return
+    }
+    c.words.forEach((w, wi) => {
+      const end = wi === c.words.length - 1 ? chunkEnd : c.words[wi + 1].start
+      const text = words.map((t, k) => (k === wi ? activeWord(t, style) : t)).join(join)
+      events.push(line(w.start, end, (wi === 0 ? chunkIntro(style) : '') + text))
+    })
   })
-  return [...header, ...lines, ''].join('\n')
+  return [...header, ...events, ''].join('\n')
 }

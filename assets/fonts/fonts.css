@@ -7,3 +7,12 @@
 @font-face { font-family: 'JetBrains Mono'; font-weight: 400; font-display: swap; src: url('./jetbrains-mono/jetbrains-mono-latin-400-normal.woff2') format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-weight: 500; font-display: swap; src: url('./jetbrains-mono/jetbrains-mono-latin-500-normal.woff2') format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-weight: 700; font-display: swap; src: url('./jetbrains-mono/jetbrains-mono-latin-700-normal.woff2') format('woff2'); }
+
+/* Font caption: sama dengan yang dibakar ke video, untuk pratinjau caption. */
+@font-face { font-family: 'Poppins'; font-weight: 700; font-display: block; src: url('./caption/Poppins-Bold.ttf') format('truetype'); }
+@font-face { font-family: 'Poppins Black'; font-weight: 400 900; font-display: block; src: url('./caption/Poppins-Black.ttf') format('truetype'); }
+@font-face { font-family: 'Anton'; font-display: block; src: url('./caption/Anton-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Bebas Neue'; font-display: block; src: url('./caption/BebasNeue-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Archivo Black'; font-display: block; src: url('./caption/ArchivoBlack-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Bangers'; font-display: block; src: url('./caption/Bangers-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Luckiest Guy'; font-display: block; src: url('./caption/LuckiestGuy-Regular.ttf') format('truetype'); }

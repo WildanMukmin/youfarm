@@ -4,7 +4,7 @@
  * itu opsi tiap mode.
  */
 
-export const SECRET_KEYS = ['gemini', 'groq', 'deepgram', 'pexels', 'elevenlabs'] as const
+export const SECRET_KEYS = ['gemini', 'groq', 'deepgram', 'pixabay', 'pexels', 'elevenlabs'] as const
 export type SecretKey = (typeof SECRET_KEYS)[number]
 export type SecretStatus = Record<SecretKey, boolean>
 
@@ -18,6 +18,7 @@ export interface Settings {
   textProvider: (typeof TEXT_PROVIDERS)[number]
   geminiTextModel: string
   geminiTtsModel: string
+  groqTextModel: string
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -26,7 +27,8 @@ export const DEFAULT_SETTINGS: Settings = {
   outputDir: null,
   textProvider: 'gemini',
   geminiTextModel: '',
-  geminiTtsModel: ''
+  geminiTtsModel: '',
+  groqTextModel: ''
 }
 
 /** Provider -> key yang dibutuhkan. Provider lokal tidak butuh key. Dipakai juga oleh opsi tiap mode. */
@@ -35,6 +37,8 @@ const PROVIDER_KEY: Record<string, SecretKey | undefined> = {
   groq: 'groq',
   deepgram: 'deepgram',
   'gemini-tts': 'gemini',
+  pixabay: 'pixabay',
+  pexels: 'pexels',
   piper: undefined,
   'whisper-local': undefined
 }
@@ -63,7 +67,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     if (v === null) next[k] = null
     else if (typeof v === 'string' && v.length > 0 && v.length <= 1024) next[k] = v
   }
-  for (const k of ['geminiTextModel', 'geminiTtsModel'] as const) {
+  for (const k of ['geminiTextModel', 'geminiTtsModel', 'groqTextModel'] as const) {
     const v = p[k]
     if (typeof v === 'string' && v.length <= 100) next[k] = v.trim()
   }

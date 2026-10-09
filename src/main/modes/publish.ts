@@ -32,7 +32,7 @@ export function enqueueRendered(rec: RenderedRecord, req: PublishRequest): { que
   const channelId = req.channelId
   const account = getAccountService().status().accounts.find((a) => a.channel.id === channelId)
   if (!account) throw new Error('Channel tujuan sudah tidak terhubung. Pilih channel lain di menu Akun.')
-  const privacy = PRIVACY.includes(req.privacy as Privacy) ? (req.privacy as Privacy) : 'private'
+  const privacy = PRIVACY.includes(req.privacy as Privacy) ? (req.privacy as Privacy) : 'public'
 
   const queue = getUploadQueue()
   let publishAt: string | null = null
@@ -53,7 +53,7 @@ export function enqueueRendered(rec: RenderedRecord, req: PublishRequest): { que
     playlistId: null,
     input: {
       title: video.title,
-      description: [rec.description, hashtags].filter(Boolean).join('\n\n'),
+      description: [rec.description, video.credits?.join('\n'), hashtags].filter(Boolean).join('\n\n'),
       tags: rec.tags,
       categoryId: CATEGORY[video.mode] ?? '24',
       defaultLanguage: video.language,

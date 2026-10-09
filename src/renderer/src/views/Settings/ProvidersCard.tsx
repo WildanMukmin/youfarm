@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { isProviderAvailable, splitGeminiModels, type SecretStatus, type Settings } from '@shared/settings'
 import { errMsg } from '@/lib/errors'
@@ -43,16 +43,24 @@ function ModelPicker({ label, value, options, onChange }: ModelPickerProps) {
   )
 }
 
-export default function ProvidersCard({ settings, status, onUpdate }: Props) {
-  const [models, setModels] = useState<{ text: string[]; tts: string[] }>({ text: [], tts: [] })
+interface ModelSectionProps {
+  title: string
+  canLoad: boolean
+  load: () => Promise<string[]>
+  children: (options: string[]) => ReactNode
+}
+
+/** Judul bagian, tombol muat daftar model dari API, dan pemilih model di bawahnya. */
+function ModelSection({ title, canLoad, load, children }: ModelSectionProps) {
+  const [models, setModels] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
-  const loadModels = async () => {
+  const run = async () => {
     setLoading(true)
     try {
-      const list = splitGeminiModels(await window.youfarm.ai.geminiModels())
+      const list = await load()
       setModels(list)
-      if (list.text.length === 0) toast.error('Tidak ada model yang cocok untuk key ini.')
+      if (list.length === 0) toast.error('Tidak ada model yang cocok untuk key ini.')
     } catch (e) {
       toast.error(errMsg(e, 'Gagal memuat model.'))
     } finally {
@@ -60,23 +68,31 @@ export default function ProvidersCard({ settings, status, onUpdate }: Props) {
     }
   }
 
+  return (
+    <div className="grid gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs text-ink-muted">{title}</span>
+        <Button size="sm" variant="ghost" disabled={!canLoad || loading} onClick={() => void run()}>
+          {loading ? 'Memuat…' : 'Muat daftar model'}
+        </Button>
+      </div>
+      {children(models)}
+    </div>
+  )
+}
+
+export default function ProvidersCard({ settings, status, onUpdate }: Props) {
   const geminiOk = isProviderAvailable('gemini', status)
   const groqOk = isProviderAvailable('groq', status)
-  const providerNote =
-    settings.textProvider === 'groq'
-      ? 'Groq belum dipakai mode apa pun; naskah Fakta Unik memakai Gemini.'
-      : !geminiOk
-        ? NEED_KEY('Gemini')
-        : !groqOk
-          ? 'Groq bisa dipilih setelah key Groq diisi.'
-          : null
+  const groq = settings.textProvider === 'groq'
+  const providerNote = !geminiOk && !groqOk ? 'Isi key Gemini atau Groq dulu.' : groq ? 'Naskah dan saran topik ditulis Groq. Suara Gemini TTS tetap memakai key Gemini.' : null
 
   return (
     <Card title="Penyedia AI" description="Provider cloud hanya bisa dipilih bila key-nya sudah diisi.">
       <div className="grid gap-5">
         <div className="grid gap-1.5">
           <Segmented
-            label="Provider teks"
+            label="Penulis naskah dan saran topik"
             value={settings.textProvider}
             onChange={(textProvider) => onUpdate({ textProvider })}
             options={[
@@ -87,16 +103,27 @@ export default function ProvidersCard({ settings, status, onUpdate }: Props) {
           {providerNote && <p className="text-xs text-ink-muted">{providerNote}</p>}
         </div>
 
-        <div className="grid gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-ink-muted">Model Gemini</span>
-            <Button size="sm" variant="ghost" disabled={!status.gemini || loading} onClick={() => void loadModels()}>
-              {loading ? 'Memuat…' : 'Muat daftar model'}
-            </Button>
-          </div>
-          <ModelPicker label="Untuk naskah (teks)" value={settings.geminiTextModel} options={withCurrent(models.text, settings.geminiTextModel)} onChange={(v) => onUpdate({ geminiTextModel: v })} />
-          <ModelPicker label="Untuk suara (TTS)" value={settings.geminiTtsModel} options={withCurrent(models.tts, settings.geminiTtsModel)} onChange={(v) => onUpdate({ geminiTtsModel: v })} />
-        </div>
+        {groq ? (
+          <ModelSection title="Model Groq" canLoad={status.groq} load={() => window.youfarm.ai.groqModels()}>
+            {(list) => (
+              <ModelPicker label="Untuk naskah (teks)" value={settings.groqTextModel} options={withCurrent(list, settings.groqTextModel)} onChange={(v) => onUpdate({ groqTextModel: v })} />
+            )}
+          </ModelSection>
+        ) : null}
+
+        <ModelSection title="Model Gemini" canLoad={status.gemini} load={() => window.youfarm.ai.geminiModels()}>
+          {(list) => {
+            const split = splitGeminiModels(list)
+            return (
+              <>
+                {!groq && (
+                  <ModelPicker label="Untuk naskah (teks)" value={settings.geminiTextModel} options={withCurrent(split.text, settings.geminiTextModel)} onChange={(v) => onUpdate({ geminiTextModel: v })} />
+                )}
+                <ModelPicker label="Untuk suara (TTS)" value={settings.geminiTtsModel} options={withCurrent(split.tts, settings.geminiTtsModel)} onChange={(v) => onUpdate({ geminiTtsModel: v })} />
+              </>
+            )
+          }}
+        </ModelSection>
       </div>
     </Card>
   )

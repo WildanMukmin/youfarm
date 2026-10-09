@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
+import CaptionPreview from '@/components/CaptionPreview'
 import JobStage from '@/components/JobStage'
 import PublishPanel from '@/components/PublishPanel'
 import ScriptPanel from '@/components/ScriptPanel'
@@ -11,11 +12,13 @@ import Panel from '@/ui/Panel'
 import PanelTabs from '@/ui/PanelTabs'
 import StatusChip from '@/ui/StatusChip'
 import FaktaUnikForm from './FaktaUnikForm'
+import { useFaktaOptions } from './useFaktaOptions'
 
 type RightTab = 'naskah' | 'publikasi'
 
 export default function FaktaUnikWorkspace({ onNavigate }: ViewProps) {
   const job = useModeJob('fakta-unik')
+  const [opts, setOpts] = useFaktaOptions()
   const [tab, setTab] = useState<RightTab>('naskah')
   const result = job.state.phase === 'done' ? job.state.result : null
 
@@ -44,7 +47,7 @@ export default function FaktaUnikWorkspace({ onNavigate }: ViewProps) {
       rightWidth={300}
       subtitle="Satu topik jadi Short 30–60 detik: naskah, suara, footage, caption."
       actions={status}
-      left={<FaktaUnikForm running={job.state.phase === 'running'} onSubmit={(o) => void job.run(o)} onOpenSettings={() => onNavigate('settings')} onOpenQueue={() => onNavigate('queue')} onOpenAccounts={() => onNavigate('accounts')} />}
+      left={<FaktaUnikForm opts={opts} setOpts={setOpts} running={job.state.phase === 'running'} onSubmit={(o) => void job.run(o)} onOpenSettings={() => onNavigate('settings')} onOpenQueue={() => onNavigate('queue')} onOpenAccounts={() => onNavigate('accounts')} />}
       right={
         <Panel title={<PanelTabs label="Panel hasil" tabs={[{ id: 'naskah', label: 'Naskah' }, { id: 'publikasi', label: 'Publikasi' }]} active={tab} onChange={setTab} />}>
           {tab === 'naskah' ? (
@@ -63,6 +66,7 @@ export default function FaktaUnikWorkspace({ onNavigate }: ViewProps) {
         onReset={job.reset}
         onOpen={(w) => void open(w)}
         idleHint="Isi topik di panel kiri, lalu klik Buat video. Pratinjau muncul di sini."
+        idle={<CaptionPreview style={opts.caption} language={opts.language} />}
       />
     </Workspace>
   )
