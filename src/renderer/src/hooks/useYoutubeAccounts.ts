@@ -69,6 +69,17 @@ export function useYoutubeAccounts() {
     }
   }, [])
 
+  const setSlots = useCallback(async (channelId: string, times: string[]): Promise<boolean> => {
+    try {
+      setStatus(await window.youfarm.youtube.setSlots(channelId, times))
+      toast.success('Jam tayang disimpan.')
+      return true
+    } catch (e) {
+      toast.error(errMsg(e))
+      return false
+    }
+  }, [])
+
   const clearCredentials = useCallback(async () => {
     try {
       const r = await window.youfarm.youtube.clearCredentials()
@@ -79,5 +90,5 @@ export function useYoutubeAccounts() {
     }
   }, [])
 
-  return { status, connecting, busyId, setCredentials, connect, cancelConnect, check, disconnect, clearCredentials }
+  return { status, connecting, busyId, setCredentials, connect, cancelConnect, check, disconnect, clearCredentials, setSlots }
 }

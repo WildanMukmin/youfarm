@@ -41,7 +41,8 @@ const api = {
     cancelConnect: (): Promise<void> => ipcRenderer.invoke(IPC.ytCancelConnect),
     check: (channelId: string): Promise<YoutubeAccountStatus> => ipcRenderer.invoke(IPC.ytCheck, channelId),
     disconnect: (channelId: string): Promise<YoutubeDisconnectResult> => ipcRenderer.invoke(IPC.ytDisconnect, channelId),
-    clearCredentials: (): Promise<YoutubeDisconnectResult> => ipcRenderer.invoke(IPC.ytClearCredentials)
+    clearCredentials: (): Promise<YoutubeDisconnectResult> => ipcRenderer.invoke(IPC.ytClearCredentials),
+    setSlots: (channelId: string, times: string[]): Promise<YoutubeAccountStatus> => ipcRenderer.invoke(IPC.ytSetSlots, channelId, times)
   },
   modes: {
     run: (jobId: string, mode: string, options: unknown): Promise<ModeRunResult> => ipcRenderer.invoke(IPC.modeRun, jobId, mode, options),

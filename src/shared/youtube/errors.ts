@@ -1,7 +1,7 @@
 /**
  * Klasifikasi error YouTube supaya antrean tahu harus apa:
  * - retry: gangguan sementara, coba lagi nanti
- * - quota: kuota atau batas upload habis, hentikan antrean sampai reset
+ * - quota: batas harian Google tercapai (project atau channel), tunggu sampai reset
  * - account: token atau izin bermasalah, butuh tindakan pengguna di menu Akun
  * - item: video ini bermasalah (judul, berkas, dll.), lewati dan tampilkan di "Perlu perhatian"
  */
@@ -10,9 +10,12 @@ export type ErrorKind = 'retry' | 'quota' | 'account' | 'item'
 export interface ClassifiedError {
   kind: ErrorKind
   message: string
+  /** Untuk kind 'quota': berlaku untuk satu channel saja atau seluruh project. */
+  scope?: 'channel' | 'project'
 }
 
-const QUOTA_REASONS = new Set(['quotaExceeded', 'dailyLimitExceeded', 'rateLimitExceeded', 'userRateLimitExceeded'])
+const QUOTA_REASONS = new Set(['quotaExceeded', 'dailyLimitExceeded'])
+const RATE_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded'])
 const UPLOAD_LIMIT_REASONS = new Set(['uploadLimitExceeded'])
 const ACCOUNT_REASONS = new Set([
   'authError',
@@ -42,10 +45,13 @@ export function classifyYoutubeError(e: { status?: number; reason?: string; netw
 
   if (e.network) return { kind: 'retry', message: 'Koneksi terputus. Akan dicoba lagi.' }
   if (UPLOAD_LIMIT_REASONS.has(reason)) {
-    return { kind: 'quota', message: 'Batas upload harian channel ini tercapai. Dilanjutkan otomatis besok.' }
+    return { kind: 'quota', scope: 'channel', message: 'Batas upload harian channel ini dari YouTube tercapai. Lanjut otomatis setelah reset.' }
   }
-  if (QUOTA_REASONS.has(reason) || (status === 429 && reason !== '')) {
-    return { kind: 'quota', message: 'Kuota API YouTube hari ini habis. Antrean dilanjutkan setelah reset.' }
+  if (QUOTA_REASONS.has(reason)) {
+    return { kind: 'quota', scope: 'project', message: 'Batas harian Google untuk project ini tercapai. Lanjut otomatis setelah reset.' }
+  }
+  if (RATE_REASONS.has(reason)) {
+    return { kind: 'retry', message: 'Terlalu banyak permintaan dalam waktu singkat. Akan dicoba lagi.' }
   }
   if (status === 401 || reason === 'invalid_grant') {
     return { kind: 'account', message: 'Akses akun YouTube tidak berlaku. Hubungkan ulang di menu Akun.' }

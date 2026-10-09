@@ -122,12 +122,12 @@ Yang kurang di referensi dan **dioptimasi** di YouFarm:
 | Judul, deskripsi diketik manual | AI membuat 3 pilihan judul, deskripsi dengan chapter, hashtag, dari naskah yang sudah ada |
 | `selfDeclaredMadeForKids: false` dikunci | Per mode: **otomatis `true` untuk mode Kids**, `false` untuk sisanya (termasuk Animasi 3D) |
 | Tidak ada pengungkapan AI | Set `containsSyntheticMedia` otomatis untuk konten sintetis |
-| Satu channel per jadwal | Antrean multi-channel, tiap channel punya slot jam tayang sendiri (mis. 07.00, 12.00, 19.00) |
+| Satu channel per jadwal | Antrean multi-channel, tiap channel punya jam tayang sendiri (diatur di menu Akun, preset 1×/2×/3× sehari) |
 | Jadwal harus dipilih tangan | Auto-slot: sistem mengisi slot kosong berikutnya, tetap menghormati batas minimal 15 menit |
 | Tidak ada playlist | Masukkan ke playlist per seri/niche |
 | Tidak ada caption terunggah | Unggah caption (SRT) sebagai track, bukan hanya dibakar ke video |
 | Thumbnail terpisah | Thumbnail dibuat otomatis dari frame terbaik + hook, lalu diunggah bersama video |
-| Kuota tidak terlihat | Penghitung kuota harian (upload = 1.600 unit dari 10.000), antrean berhenti rapi saat habis dan lanjut besok |
+| Kuota tidak terlihat | Tidak dihitung sendiri. Sejak 1 Juni 2026 upload punya jatah sendiri dari Google (100 upload/hari per project, terpisah dari 10.000 unit untuk thumbnail, playlist, caption), jadi 10 channel × 2 video/hari muat. Bila Google menolak karena batas harian, antrean menunggu sampai reset (tengah malam Pasifik ≈ 14.00 WIB): batas channel hanya menahan channel itu, batas project menahan semua |
 | Video gagal hanya diberi pesan | Layar "Perlu perhatian": kesalahan, penyebab, tombol coba lagi |
 
 Pembaruan metadata setelah upload (judul, deskripsi, thumbnail) memakai `videos.update` dan `thumbnails.set`.

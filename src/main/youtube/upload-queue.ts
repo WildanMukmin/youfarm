@@ -1,5 +1,5 @@
 import type { Sqlite } from '../platform/sqlite.ts'
-import { QUOTA_COST, canSpend, currentQuota, nextQuotaReset, remainingQuota, spend, uploadsLeft, DAILY_QUOTA, type QuotaState } from '../../shared/youtube/quota.ts'
+import { nextQuotaReset } from '../../shared/youtube/quota.ts'
 import { buildUploadBody, type UploadInput } from '../../shared/youtube/metadata.ts'
 import { randomGapMs } from '../../shared/youtube/schedule.ts'
 import {
@@ -49,8 +49,6 @@ export interface QueueDeps {
   backoffMs?: number
 }
 
-const QUOTA_KEY = 'youtube-quota'
-
 export function createUploadQueue(deps: QueueDeps) {
   const { db } = deps
   const now = deps.now ?? (() => new Date())
@@ -62,21 +60,6 @@ export function createUploadQueue(deps: QueueDeps) {
   let running = false
 
   const iso = (): string => now().toISOString()
-
-  // --- kuota -------------------------------------------------------------
-  function readQuota(): QuotaState {
-    const raw = db.get<{ value: string }>('SELECT value FROM kv WHERE key = ?', [QUOTA_KEY])?.value
-    let saved: QuotaState | null = null
-    try {
-      saved = raw ? (JSON.parse(raw) as QuotaState) : null
-    } catch {
-      saved = null
-    }
-    return currentQuota(saved, now())
-  }
-  function writeQuota(q: QuotaState): void {
-    db.run('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [QUOTA_KEY, JSON.stringify(q)])
-  }
 
   // --- baris <-> item -----------------------------------------------------
   function toItem(r: Row): QueueItem {
@@ -110,14 +93,10 @@ export function createUploadQueue(deps: QueueDeps) {
     db.run(`UPDATE uploads SET ${cols.join(', ')} WHERE id = ?`, [...vals, id])
   }
 
-  const snapshot = (): QueueSnapshot => {
-    const q = readQuota()
-    return {
-      items: db.all<Row>('SELECT * FROM uploads ORDER BY id DESC').map(toItem),
-      quota: { used: q.used, remaining: remainingQuota(q), uploadsLeft: uploadsLeft(q), resetAt: nextQuotaReset(now()).toISOString() },
-      running
-    }
-  }
+  const snapshot = (): QueueSnapshot => ({
+    items: db.all<Row>('SELECT * FROM uploads ORDER BY id DESC').map(toItem),
+    running
+  })
 
   // --- API publik ---------------------------------------------------------
   function enqueue(req: EnqueueRequest): number {
@@ -155,9 +134,6 @@ export function createUploadQueue(deps: QueueDeps) {
 
   // --- inti: proses satu item --------------------------------------------
   async function processNext(): Promise<Outcome> {
-    const quota = readQuota()
-    if (!canSpend(quota, QUOTA_COST.videoUpload)) return 'quota'
-
     const row = db.get<Row>("SELECT * FROM uploads WHERE status = 'queued' AND (not_before IS NULL OR not_before <= ?) ORDER BY id LIMIT 1", [iso()])
     if (!row) return 'idle'
 
@@ -167,7 +143,7 @@ export function createUploadQueue(deps: QueueDeps) {
     const ac = new AbortController()
     current = ac
 
-    const fail = (kind: ErrorKind, message: string): Outcome => {
+    const fail = (kind: ErrorKind, message: string, scope?: 'channel' | 'project'): Outcome => {
       if (kind === 'account') {
         setStatus(row.id, 'blocked', { error_kind: kind, error_message: message })
         // Item lain di kanal yang sama menunggu juga, supaya tidak ikut gagal satu per satu.
@@ -175,9 +151,12 @@ export function createUploadQueue(deps: QueueDeps) {
         return 'blocked'
       }
       if (kind === 'quota') {
-        setStatus(row.id, 'queued', { error_kind: kind, error_message: message })
-        // Google bilang kuota habis: sinkronkan hitungan lokal supaya antrean berhenti rapi.
-        writeQuota({ ...readQuota(), used: DAILY_QUOTA })
+        // Google menolak karena batas harian: tunggu sampai reset. Batas channel hanya menahan channel itu;
+        // batas project menahan semua yang antre. Tidak ada hitungan kuota lokal.
+        const until = nextQuotaReset(now()).toISOString()
+        setStatus(row.id, 'queued', { error_kind: kind, error_message: message, not_before: until })
+        const where = scope === 'channel' ? "status = 'queued' AND channel_id = ?" : "status = 'queued'"
+        db.run(`UPDATE uploads SET not_before = ?, error_kind = 'quota', error_message = ?, updated_at = ? WHERE ${where} AND id != ?`, scope === 'channel' ? [until, message, iso(), row.channel_id, row.id] : [until, message, iso(), row.id])
         return 'quota'
       }
       if (kind === 'retry' && attempts < MAX_ATTEMPTS) {
@@ -200,7 +179,6 @@ export function createUploadQueue(deps: QueueDeps) {
       let video: UploadedVideo
       try {
         const body = buildUploadBody(input, now())
-        // Biaya dihitung begitu permintaan upload dikirim, bukan hanya saat berhasil.
         video = await uploader({
           accessToken: token,
           filePath: row.file_path,
@@ -210,15 +188,13 @@ export function createUploadQueue(deps: QueueDeps) {
           chunkSize: deps.chunkSize,
           retryDelayMs: deps.retryDelayMs
         })
-        writeQuota(spend(readQuota(), QUOTA_COST.videoUpload))
       } catch (e) {
         if (ac.signal.aborted) {
           setStatus(row.id, 'queued', { error_message: 'Dibatalkan, akan dilanjutkan.' })
           return 'idle'
         }
         if (e instanceof YoutubeApiError) {
-          if (e.classified.kind !== 'account') writeQuota(spend(readQuota(), QUOTA_COST.videoUpload))
-          return fail(e.classified.kind, e.classified.message)
+          return fail(e.classified.kind, e.classified.message, e.classified.scope)
         }
         if ((e as NodeJS.ErrnoException).code === 'ENOENT') return fail('item', 'Berkas video tidak ditemukan di disk.')
         return fail('item', e instanceof Error ? e.message : 'Upload gagal.')
@@ -229,7 +205,6 @@ export function createUploadQueue(deps: QueueDeps) {
       if (row.thumbnail_path) {
         try {
           await setThumbnail({ accessToken: token, videoId: video.id, filePath: row.thumbnail_path, apiBase: deps.apiBase, signal: ac.signal })
-          writeQuota(spend(readQuota(), QUOTA_COST.thumbnailSet))
         } catch (e) {
           warnings.push(`Thumbnail tidak terpasang: ${e instanceof Error ? e.message : 'gagal'}`)
         }
@@ -237,7 +212,6 @@ export function createUploadQueue(deps: QueueDeps) {
       if (row.playlist_id) {
         try {
           await addToPlaylist({ accessToken: token, playlistId: row.playlist_id, videoId: video.id, apiBase: deps.apiBase, signal: ac.signal })
-          writeQuota(spend(readQuota(), QUOTA_COST.playlistItemInsert))
         } catch (e) {
           warnings.push(`Belum masuk playlist: ${e instanceof Error ? e.message : 'gagal'}`)
         }
@@ -267,7 +241,7 @@ export function createUploadQueue(deps: QueueDeps) {
         const o = await processNext()
         if (o === 'done' || o === 'failed') wait = randomGapMs(rand(), minGapSec, maxGapSec)
         else if (o === 'retry' || o === 'blocked') wait = 5000
-        else if (o === 'quota') wait = Math.min(10 * 60_000, Math.max(30_000, nextQuotaReset(now()).getTime() - now().getTime()))
+        else if (o === 'quota') wait = 30_000
       } catch {
         wait = 30_000
       }

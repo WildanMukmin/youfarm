@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { disclosureFor } from '../../src/shared/contracts/modes.ts'
 import { buildUploadBody, normalizeTags, sanitizeDescription, sanitizeTitle, type UploadInput } from '../../src/shared/youtube/metadata.ts'
 import { nextFreeSlots, normalizeSlots, randomGapMs } from '../../src/shared/youtube/schedule.ts'
-import { DAILY_QUOTA, QUOTA_COST, canSpend, currentQuota, nextQuotaReset, quotaDay, spend, uploadsLeft } from '../../src/shared/youtube/quota.ts'
+import { nextQuotaReset, quotaDay } from '../../src/shared/youtube/quota.ts'
 import { classifyYoutubeError, reasonFromBody } from '../../src/shared/youtube/errors.ts'
 
 const NOW = new Date('2026-10-08T10:00:00Z')
@@ -96,22 +96,6 @@ test('randomGapMs berada di rentang dan menerima batas terbalik', () => {
   assert.equal(randomGapMs(0.999999, 90, 30), 90_000)
 })
 
-test('kuota: 6 upload per hari, reset di tengah malam Pasifik', () => {
-  let s = currentQuota(null, NOW)
-  assert.equal(uploadsLeft(s), 6)
-  for (let i = 0; i < 6; i++) {
-    assert.equal(canSpend(s, QUOTA_COST.videoUpload), true)
-    s = spend(s, QUOTA_COST.videoUpload)
-  }
-  assert.equal(canSpend(s, QUOTA_COST.videoUpload), false)
-  assert.equal(s.used, 9600)
-  assert.ok(DAILY_QUOTA - s.used < QUOTA_COST.videoUpload)
-
-  // Hari yang sama: state dipertahankan. Hari berikutnya: direset.
-  assert.equal(currentQuota(s, new Date('2026-10-08T20:00:00Z')).used, 9600)
-  assert.equal(currentQuota(s, new Date('2026-10-09T20:00:00Z')).used, 0)
-})
-
 test('quotaDay mengikuti zona Pasifik dan nextQuotaReset tepat di tengah malamnya', () => {
   // 08 Okt 2026 05:00 UTC masih 07 Okt 22:00 PDT.
   assert.equal(quotaDay(new Date('2026-10-08T05:00:00Z')), '2026-10-07')
@@ -126,7 +110,9 @@ test('klasifikasi error: retry / quota / account / item', () => {
   assert.equal(classifyYoutubeError({ network: true }).kind, 'retry')
   assert.equal(classifyYoutubeError({ status: 503 }).kind, 'retry')
   assert.equal(classifyYoutubeError({ status: 403, reason: 'quotaExceeded' }).kind, 'quota')
-  assert.equal(classifyYoutubeError({ status: 400, reason: 'uploadLimitExceeded' }).kind, 'quota')
+  assert.deepEqual([classifyYoutubeError({ status: 400, reason: 'uploadLimitExceeded' }).kind, classifyYoutubeError({ status: 400, reason: 'uploadLimitExceeded' }).scope], ['quota', 'channel'])
+  assert.equal(classifyYoutubeError({ status: 403, reason: 'quotaExceeded' }).scope, 'project')
+  assert.equal(classifyYoutubeError({ status: 403, reason: 'rateLimitExceeded' }).kind, 'retry')
   assert.equal(classifyYoutubeError({ status: 401 }).kind, 'account')
   assert.equal(classifyYoutubeError({ status: 403, reason: 'insufficientPermissions' }).kind, 'account')
   assert.equal(classifyYoutubeError({ status: 400, reason: 'invalidTitle' }).kind, 'item')

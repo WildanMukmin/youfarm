@@ -127,7 +127,7 @@ test('upload: kuota habis saat init -> error terklasifikasi quota', async () => 
     f.s.initReason = 'quotaExceeded'
     await assert.rejects(
       uploadVideo({ accessToken: 'TOK', filePath: tmpFile('c.mp4', MB), body, apiBase: f.base }),
-      (e: unknown) => e instanceof YoutubeApiError && e.classified.kind === 'quota' && /Kuota/.test(e.message)
+      (e: unknown) => e instanceof YoutubeApiError && e.classified.kind === 'quota' && e.classified.scope === 'project' && /Batas harian/.test(e.message)
     )
   } finally {
     close(f)

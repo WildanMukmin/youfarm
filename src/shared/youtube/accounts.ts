@@ -1,4 +1,5 @@
 /** Tipe dan logika murni untuk akun YouTube. Token dan secret sudah terenkripsi saat sampai di sini. */
+import { normalizeSlots } from './schedule.ts'
 
 export const SCOPE_READONLY = 'https://www.googleapis.com/auth/youtube.readonly'
 export const SCOPE_UPLOAD = 'https://www.googleapis.com/auth/youtube.upload'
@@ -9,6 +10,10 @@ export const YOUTUBE_SCOPES = [SCOPE_READONLY, SCOPE_UPLOAD, SCOPE_ANALYTICS]
 
 /** Token app Google Cloud yang masih mode Testing kedaluwarsa 7 hari setelah diterbitkan. */
 export const TESTING_TOKEN_DAYS = 7
+
+/** Jam tayang (waktu lokal) untuk channel yang belum diatur. */
+export const DEFAULT_SLOTS = ['07:00', '12:00', '19:00']
+export const MAX_SLOTS = 12
 
 export interface YoutubeChannel {
   id: string
@@ -23,6 +28,8 @@ export interface StoredAccount {
   scopes: string[]
   lastCheckedAt?: string
   lastCheckOk?: boolean
+  /** Jam tayang "HH:MM" waktu lokal. Kosong/undefined = DEFAULT_SLOTS. */
+  slots?: string[]
 }
 
 export interface StoredYoutube {
@@ -49,6 +56,8 @@ export interface YoutubeAccountInfo {
   canAnalytics: boolean
   /** Perkiraan kedaluwarsa bila app Google Cloud masih mode Testing. */
   testingExpiryAt: string
+  /** Jam tayang efektif (sudah memakai bawaan bila belum diatur). */
+  slots: string[]
 }
 
 export interface YoutubeAccountStatus {
@@ -86,7 +95,8 @@ export function accountInfos(store: StoredYoutube): YoutubeAccountInfo[] {
       state: accountState(a),
       canUpload: hasScope(a.scopes, SCOPE_UPLOAD),
       canAnalytics: hasScope(a.scopes, SCOPE_ANALYTICS),
-      testingExpiryAt: testingExpiry(a.connectedAt)
+      testingExpiryAt: testingExpiry(a.connectedAt),
+      slots: a.slots ?? DEFAULT_SLOTS
     }))
     .sort((x, y) => x.channel.title.localeCompare(y.channel.title, 'id'))
 }
@@ -98,6 +108,16 @@ export function upsertAccount(store: StoredYoutube, account: StoredAccount): Sto
 export function markChecked(store: StoredYoutube, channelId: string, checkedAt: string, ok: boolean): StoredYoutube {
   const account = store.accounts?.[channelId]
   return account ? upsertAccount(store, { ...account, lastCheckedAt: checkedAt, lastCheckOk: ok }) : store
+}
+
+/** Simpan jam tayang channel. Format tak valid dan duplikat dibuang; minimal satu, maksimal MAX_SLOTS. */
+export function setAccountSlots(store: StoredYoutube, channelId: string, times: unknown): StoredYoutube {
+  const account = store.accounts?.[channelId]
+  if (!account) throw new Error('Kanal ini sudah tidak ada di daftar.')
+  const list = normalizeSlots(Array.isArray(times) ? times.filter((t): t is string => typeof t === 'string') : [])
+  if (list.length === 0) throw new Error('Isi minimal satu jam tayang (format JJ:MM).')
+  if (list.length > MAX_SLOTS) throw new Error(`Maksimal ${MAX_SLOTS} jam tayang per channel.`)
+  return upsertAccount(store, { ...account, slots: list })
 }
 
 export function removeAccount(store: StoredYoutube, channelId: string): StoredYoutube {

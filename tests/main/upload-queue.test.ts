@@ -62,14 +62,14 @@ test('enqueue: judul kosong dan jadwal terlalu dekat ditolak sejak awal', async 
   assert.equal(s.queue.snapshot().items.length, 0)
 })
 
-test('berhasil: status done, video id tersimpan, kuota terpakai 1600', async () => {
+test('berhasil: status done dan video id tersimpan', async () => {
   const s = await setup()
   const id = s.queue.enqueue(req())
   assert.equal(await s.queue.processNext(), 'done')
   const item = statusOf(s, id)
   assert.equal(item.status, 'done')
   assert.equal(item.videoId, 'v-1')
-  assert.equal(s.queue.snapshot().quota.used, 1600)
+  assert.ok(!('quota' in s.queue.snapshot()), 'tidak ada hitungan kuota lokal')
   assert.equal(await s.queue.processNext(), 'idle')
 })
 
@@ -82,33 +82,66 @@ test('urutan FIFO dan antrean kosong -> idle', async () => {
   assert.deepEqual(s.calls, ['a.mp4', 'b.mp4'])
 })
 
-test('kuota: 6 upload per hari, ke-7 menunggu tanpa memanggil uploader, lanjut setelah reset', async () => {
+test('tanpa batas lokal: 20 upload sehari jalan semua', async () => {
   const s = await setup()
-  for (let i = 0; i < 7; i++) s.queue.enqueue(req({ filePath: `f${i}.mp4` }))
-  const outcomes: Outcome[] = []
-  for (let i = 0; i < 7; i++) outcomes.push(await s.queue.processNext())
-  assert.deepEqual(outcomes, ['done', 'done', 'done', 'done', 'done', 'done', 'quota'])
-  assert.equal(s.calls.length, 6)
-  assert.equal(s.queue.snapshot().items.filter((i) => i.status === 'queued').length, 1)
-  assert.equal(await s.queue.processNext(), 'quota')
-  assert.equal(s.calls.length, 6)
-
-  // Besok (setelah tengah malam Pasifik) kuota kembali.
-  s.setNow('2026-10-09T12:00:00Z')
-  assert.equal(await s.queue.processNext(), 'done')
-  assert.equal(s.calls.length, 7)
+  for (let i = 0; i < 20; i++) s.queue.enqueue(req({ filePath: `f${i}.mp4` }))
+  for (let i = 0; i < 20; i++) assert.equal(await s.queue.processNext(), 'done')
+  assert.equal(s.calls.length, 20)
 })
 
-test('Google bilang kuota habis: item tetap antre dan antrean berhenti', async () => {
+test('batas project dari Google: semua yang antre menunggu sampai reset Pasifik, lalu lanjut', async () => {
+  let refuse = true
+  const s = await setup({
+    uploader: async (p) => {
+      if (refuse) throw new YoutubeApiError(403, 'quotaExceeded')
+      return { id: p.filePath, privacy: 'private', publishAt: null }
+    }
+  })
+  const a = s.queue.enqueue(req({ channelId: 'UC1', filePath: 'a.mp4' }))
+  const b = s.queue.enqueue(req({ channelId: 'UC2', filePath: 'b.mp4' }))
+  assert.equal(await s.queue.processNext(), 'quota')
+  // 08 Okt 10:00 UTC = 03:00 PDT; reset berikutnya tengah malam PDT = 09 Okt 07:00 UTC.
+  for (const id of [a, b]) {
+    assert.equal(statusOf(s, id).status, 'queued')
+    assert.equal(statusOf(s, id).notBefore, '2026-10-09T07:00:00.000Z')
+    assert.equal(statusOf(s, id).errorKind, 'quota')
+  }
+  assert.equal(await s.queue.processNext(), 'idle', 'tidak mencoba lagi sebelum reset')
+
+  refuse = false
+  s.setNow('2026-10-09T07:01:00Z')
+  assert.equal(await s.queue.processNext(), 'done')
+  assert.equal(await s.queue.processNext(), 'done')
+  assert.equal(statusOf(s, a).errorKind, null)
+})
+
+test('batas upload per channel: hanya channel itu yang menunggu', async () => {
+  const s = await setup({
+    uploader: async (p) => {
+      if (p.filePath.startsWith('uc1')) throw new YoutubeApiError(400, 'uploadLimitExceeded')
+      return { id: p.filePath, privacy: 'private', publishAt: null }
+    }
+  })
+  const a1 = s.queue.enqueue(req({ channelId: 'UC1', filePath: 'uc1-a.mp4' }))
+  const a2 = s.queue.enqueue(req({ channelId: 'UC1', filePath: 'uc1-b.mp4' }))
+  const b1 = s.queue.enqueue(req({ channelId: 'UC2', filePath: 'uc2-a.mp4' }))
+  assert.equal(await s.queue.processNext(), 'quota')
+  assert.ok(statusOf(s, a1).notBefore && statusOf(s, a2).notBefore)
+  assert.equal(statusOf(s, b1).notBefore, null)
+  assert.equal(await s.queue.processNext(), 'done')
+  assert.equal(statusOf(s, b1).status, 'done')
+})
+
+test('rate limit sesaat dicoba lagi sebentar, bukan menunggu sampai besok', async () => {
   const s = await setup({
     uploader: async () => {
-      throw new YoutubeApiError(403, 'quotaExceeded')
+      throw new YoutubeApiError(403, 'rateLimitExceeded')
     }
   })
   const id = s.queue.enqueue(req())
-  assert.equal(await s.queue.processNext(), 'quota')
-  assert.equal(statusOf(s, id).status, 'queued')
-  assert.equal(s.queue.snapshot().quota.remaining, 0)
+  assert.equal(await s.queue.processNext(), 'retry')
+  const wait = new Date(statusOf(s, id).notBefore!).getTime() - new Date('2026-10-08T10:00:00Z').getTime()
+  assert.ok(wait > 0 && wait <= 60 * 60_000, `jeda ${wait} ms`)
 })
 
 test('gangguan sementara: jeda bertingkat, lalu gagal setelah 5 percobaan', async () => {
@@ -176,7 +209,6 @@ test('akun bermasalah: semua item kanal itu diblokir, kanal lain jalan, lepas bl
   assert.equal(await s.queue.processNext(), 'done')
   assert.equal(statusOf(s, b1).status, 'done')
   assert.equal(s.calls.includes('a1.mp4'), false, 'tidak ada upload untuk akun yang diblokir')
-  assert.equal(s.queue.snapshot().quota.used, 1600, 'blokir akun tidak memakai kuota')
 
   s.queue.unblockChannel('UC1')
   assert.equal(statusOf(s, a1).status, 'queued')

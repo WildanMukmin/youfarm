@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { KeySquare, Link2, UsersRound } from 'lucide-react'
+import { KeyRound, KeySquare, Link2, UsersRound } from 'lucide-react'
 import type { AccountState } from '@shared/youtube/accounts'
 import { useFitRows } from '@/hooks/useFitRows'
 import { useStickyState } from '@/hooks/useStickyState'
 import { useYoutubeAccounts } from '@/hooks/useYoutubeAccounts'
+import { useQueue } from '@/hooks/useQueue'
 import Workspace from '@/layout/Workspace'
 import { paginate } from '@/lib/paginate'
 import Button from '@/ui/Button'
@@ -14,6 +15,7 @@ import Segments from '@/ui/Segments'
 import StatusChip from '@/ui/StatusChip'
 import ChannelsTable, { HEAD_HEIGHT, ROW_HEIGHT, densityFor } from './ChannelsTable'
 import CredentialsPanel from './CredentialsPanel'
+import SlotEditor from './SlotEditor'
 
 type Filter = 'all' | 'ok' | 'action' | 'unchecked'
 
@@ -31,6 +33,10 @@ export default function AccountsView() {
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useStickyState('akun:per-page', AUTO)
   const fit = useFitRows(ROW_HEIGHT, HEAD_HEIGHT)
+  const queue = useQueue()
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Kredensial jarang diubah setelah diisi: panelnya hanya muncul bila belum diisi atau diminta.
+  const [showCreds, setShowCreds] = useState(false)
 
   const accounts = yt.status?.accounts ?? []
   const count = (f: Filter): number => accounts.filter((a) => MATCH[f](a.state)).length
@@ -40,6 +46,7 @@ export default function AccountsView() {
   }, [accounts, query, filter])
   const pg = paginate(filtered, page, perPage === AUTO ? fit.rows : perPage)
   const needAction = count('action')
+  const selected = accounts.find((a) => a.channel.id === selectedId) ?? null
 
   const actions = yt.connecting ? (
     <>
@@ -49,11 +56,20 @@ export default function AccountsView() {
       </Button>
     </>
   ) : (
+    <>
+    {yt.status?.hasCredentials && (
+      <Button variant="ghost" size="sm" aria-pressed={showCreds} onClick={() => setShowCreds((v) => !v)}>
+        <span className="flex items-center gap-1.5">
+          <KeyRound size={14} aria-hidden /> Kredensial
+        </span>
+      </Button>
+    )}
     <Button size="sm" disabled={!yt.status?.hasCredentials} onClick={() => void yt.connect()}>
       <span className="flex items-center gap-1.5">
         <Link2 size={14} aria-hidden /> Hubungkan channel
       </span>
     </Button>
+    </>
   )
 
   return (
@@ -62,7 +78,9 @@ export default function AccountsView() {
       subtitle={yt.status ? `${accounts.length} channel terhubung${needAction ? ` · ${needAction} perlu tindakan` : ''}` : 'Memuat…'}
       actions={actions}
       leftWidth={280}
-      left={yt.status && <CredentialsPanel status={yt.status} onSave={yt.setCredentials} onClear={() => void yt.clearCredentials()} />}
+      left={yt.status && (!yt.status.hasCredentials || showCreds) && <CredentialsPanel status={yt.status} onSave={yt.setCredentials} onClear={() => void yt.clearCredentials()} />}
+      rightWidth={300}
+      right={selected && <SlotEditor account={selected} queueItems={queue.snapshot?.items ?? []} onSave={(t) => yt.setSlots(selected.channel.id, t)} onClose={() => setSelectedId(null)} />}
     >
       {!yt.status ? null : !yt.status.hasCredentials ? (
         <EmptyState icon={KeySquare} title="Isi kredensial Google dulu">
@@ -85,7 +103,7 @@ export default function AccountsView() {
                 { value: 'unchecked', label: 'Belum dicek', count: count('unchecked') }
               ]}
             />
-            <div className="ml-auto w-64">
+            <div className="ml-auto w-56 min-w-[140px] shrink">
               <SearchInput
                 label="Cari channel"
                 value={query}
@@ -114,6 +132,8 @@ export default function AccountsView() {
                 onConnect={() => void yt.connect()}
                 onCheck={(id) => void yt.check(id)}
                 onDisconnect={(id) => void yt.disconnect(id)}
+                selectedId={selectedId}
+                onSchedule={(id) => setSelectedId((cur) => (cur === id ? null : id))}
               />
             )}
           </div>

@@ -21,6 +21,7 @@ export const IPC = {
   ytCheck: 'youtube:check',
   ytDisconnect: 'youtube:disconnect',
   ytClearCredentials: 'youtube:clear-credentials',
+  ytSetSlots: 'youtube:set-slots',
   queueSnapshot: 'queue:snapshot',
   queueRetry: 'queue:retry',
   queueRemove: 'queue:remove',

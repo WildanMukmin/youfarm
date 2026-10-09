@@ -34,6 +34,16 @@ export function filterQueue(items: QueueItem[], p: { filter: QueueFilter; channe
   )
 }
 
+/** Video berikutnya yang akan tayang (terjadwal, belum lewat, tidak gagal). */
+export function nextAiring(items: QueueItem[], now: Date): QueueItem | null {
+  const t = now.getTime()
+  return (
+    items
+      .filter((i) => i.publishAt && i.status !== 'failed' && new Date(i.publishAt).getTime() > t)
+      .sort((a, b) => (a.publishAt as string).localeCompare(b.publishAt as string))[0] ?? null
+  )
+}
+
 /** Angka ringkasan untuk deret statistik. `today` = awal hari lokal. */
 export function queueCounts(items: QueueItem[], today: Date) {
   const start = today.getTime()

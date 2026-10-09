@@ -29,5 +29,6 @@ export function registerYoutubeIpc(): void {
   ipcMain.handle(IPC.ytCancelConnect, (): void => svc().cancelConnect())
   ipcMain.handle(IPC.ytCheck, (_e, id: unknown): Promise<YoutubeAccountStatus> => svc().check(channelId(id)))
   ipcMain.handle(IPC.ytDisconnect, (_e, id: unknown): Promise<YoutubeDisconnectResult> => svc().disconnect(channelId(id)))
+  ipcMain.handle(IPC.ytSetSlots, (_e, id: unknown, times: unknown): YoutubeAccountStatus => svc().setSlots(channelId(id), times))
   ipcMain.handle(IPC.ytClearCredentials, (): Promise<YoutubeDisconnectResult> => svc().clearCredentials())
 }

@@ -5,6 +5,7 @@ import {
   accountInfos,
   markChecked,
   removeAccount,
+  setAccountSlots,
   upsertAccount,
   validateClientId,
   type StoredAccount,
@@ -197,6 +198,12 @@ export function createAccountService(deps: AccountDeps) {
       const revoked = account ? await revoke(account.refreshToken) : true
       deps.store.write(removeAccount(deps.store.read(), channelId))
       return { status: status(), revoked }
+    },
+
+    /** Jam tayang per channel; dipakai saat video dijadwalkan ke slot kosong berikutnya. */
+    setSlots(channelId: string, times: unknown): YoutubeAccountStatus {
+      deps.store.write(setAccountSlots(deps.store.read(), channelId, times))
+      return status()
     },
 
     async clearCredentials(): Promise<YoutubeDisconnectResult> {

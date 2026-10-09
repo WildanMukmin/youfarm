@@ -17,11 +17,12 @@ Diperbarui: 9 Okt 2026. Acuan rencana: `ide-awal-youfarm.md` (bagian 10, Fase 1 
 | Navigasi per mode | Tiap mode punya menu sendiri di sidebar; mode yang belum ada menampilkan halaman "segera" | app sungguhan |
 | Ruang kerja editor | Fakta Unik: panel Input (kiri), pratinjau 9:16 + tahapan + progres + Batal (tengah), Naskah / Publikasi (kanan). Video diputar langsung di aplikasi lewat protokol `youfarm-media://` (bisa seek). Isian form dan proses bertahan saat pindah menu | app sungguhan |
 | Akun (tabel) | Kredensial di panel kiri; channel dalam tabel dengan cari, filter status, paginasi 10/25/50 per halaman | app sungguhan, 23 channel palsu |
-| Antrean (tab Upload) | Bilah judul dengan Jeda/Lanjutkan (bertahan setelah aplikasi ditutup), tab Upload dan Produksi (segera), deret statistik (kuota, menunggu, perlu perhatian, terunggah hari ini) yang bisa diklik sebagai filter, tabel dengan filter status/channel, cari, paginasi, buka di YouTube Studio | app sungguhan, 18 item palsu |
+| Jam tayang per channel | Diatur di menu Akun (panel kanan): preset 1×/2×/3× sehari, tambah/hapus jam, pratinjau slot kosong berikutnya. Panel Publikasi menunjukkan kapan video akan tayang; enqueue memakai jam tayang channel | tes unit + uji menyeluruh (jadwal jatuh tepat 12.00 lokal) |
+| Antrean (tab Upload) | Bilah judul dengan Jeda/Lanjutkan (bertahan setelah aplikasi ditutup), tab Upload dan Produksi (segera), deret statistik (tayang berikutnya, menunggu, perlu perhatian, terunggah hari ini) yang bisa diklik sebagai filter, tabel dengan filter status/channel, cari, paginasi, buka di YouTube Studio. Tanpa hitungan kuota lokal | app sungguhan, 18 item palsu |
 | Sidebar | Bisa diciutkan (ikon saja + tooltip) atau dibuka (ikon + label + badge), Ctrl+B, pilihan diingat; badge Antrean merah bila ada yang perlu perhatian | app sungguhan |
 | Tanpa scrollbar | Scrollbar disembunyikan di seluruh aplikasi; panel yang lebih panjang dari layar tetap bisa digeser dengan bayangan tepi sebagai penanda; tabel memakai baris "pas layar" dan menyembunyikan kolom kurang penting saat sempit | dicek di 960x600, 1280x800, 1600x900, sidebar terbuka dan ciut |
 
-Perintah: `npm run dev`, `npm run build`, `npm run typecheck`, `npm test` (89 tes), `npm run setup:ffmpeg`, `npm run setup:piper`.
+Perintah: `npm run dev`, `npm run build`, `npm run typecheck`, `npm test` (95 tes), `npm run setup:ffmpeg`, `npm run setup:piper`.
 
 ### Yang terbukti di Fakta Unik
 - **Nyata**: ffmpeg (render, caption terbakar, thumbnail), Piper (suara Indonesia), antrean, SQLite, enkripsi key, IPC, UI.
@@ -65,7 +66,7 @@ Bila ada yang gagal, kirim pesan errornya. Titik paling mungkin: bentuk respons 
 - **Preload CommonJS** (`index.cjs`): renderer ber-sandbox tidak bisa memuat preload ESM.
 - **Import relatif ber-ekstensi `.ts`** di file yang dites Node; hindari *parameter properties* TypeScript di sana (Node type-stripping tidak mendukungnya).
 - **Windows**: `tar` di PATH bisa GNU tar yang tidak membaca zip, jadi skrip setup memakai `C:\Windows\System32\tar.exe`. `rename` lintas drive gagal (EXDEV), jadi dipakai salin lalu hapus.
-- **Kuota** upload dihitung begitu permintaan upload dikirim, kecuali error akun. Bila Google melaporkan kuota habis, hitungan lokal disinkronkan ke habis.
+- **Kuota**: YouFarm tidak menghitung kuota sendiri (upload punya jatah 100/hari per project sejak 1 Juni 2026). Hanya bereaksi bila Google menolak: `uploadLimitExceeded` menahan channel itu, `quotaExceeded`/`dailyLimitExceeded` menahan semua, keduanya sampai tengah malam Pasifik; rate limit sesaat dicoba ulang.
 - **Profil data uji terpisah**: bila salah satu variabel uji di bawah aktif, aplikasi memakai `%APPDATA%\youfarm-test`, bukan `%APPDATA%\youfarm` milik pengguna (bisa diganti dengan `YOUFARM_USER_DATA`). Uji otomatis tidak boleh pernah menyentuh data pengguna.
 - **Variabel lingkungan khusus pengembangan** (diabaikan di build rilis): `YOUFARM_FAKE_GOOGLE`, `YOUFARM_FAKE_GEMINI`, `YOUFARM_FAKE_PEXELS` (alamat server palsu), `YOUFARM_AUTH_URL_FILE`, `YOUFARM_QUEUE_GAP="min,max"`, `YOUFARM_DEV_ENQUEUE=1`.
 - **Keamanan IPC**: renderer tidak pernah mengirim path berkas. Buka video dan masukkan ke antrean memakai `jobId` yang disimpan di main.

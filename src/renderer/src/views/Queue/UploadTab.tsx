@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Inbox } from 'lucide-react'
 import type { QueueSnapshot } from '@shared/youtube/queue'
-import QuotaMeter from '@/components/QuotaMeter'
 import StatTile from '@/components/StatTile'
 import { useFitRows } from '@/hooks/useFitRows'
 import { useStickyState } from '@/hooks/useStickyState'
 import { paginate } from '@/lib/paginate'
-import { filterQueue, queueCounts, sortQueue, type QueueFilter } from '@/lib/queueView'
+import { filterQueue, nextAiring, queueCounts, sortQueue, type QueueFilter } from '@/lib/queueView'
+import { formatSlot } from '@/lib/format'
 import Button from '@/ui/Button'
 import InlineSelect from '@/ui/InlineSelect'
 import Pagination, { AUTO } from '@/ui/Pagination'
@@ -42,6 +42,7 @@ export default function UploadTab({ snapshot, channelNames, onRetry, onRemove, o
 
   const items = snapshot.items
   const counts = useMemo(() => queueCounts(items, startOfToday()), [items])
+  const next = useMemo(() => nextAiring(items, new Date()), [items])
   const channels = useMemo(() => [...new Set(items.map((i) => i.channelId))], [items])
   const rows = useMemo(() => sortQueue(filterQueue(items, { filter, channelId, query, channelNames })), [items, filter, channelId, query, channelNames])
   const pg = paginate(rows, page, perPage === AUTO ? fit.rows : perPage)
@@ -54,7 +55,12 @@ export default function UploadTab({ snapshot, channelNames, onRetry, onRemove, o
   return (
     <div ref={pageSize.ref} className="flex min-h-0 flex-1 flex-col">
       <div className={`grid shrink-0 gap-3 border-b border-line p-4 ${wide ? 'grid-cols-[minmax(240px,1.6fr)_repeat(4,minmax(0,1fr))]' : 'grid-cols-[minmax(200px,1.4fr)_repeat(3,minmax(0,1fr))]'}`}>
-        <QuotaMeter quota={snapshot.quota} />
+        <StatTile
+          label="Tayang berikutnya"
+          tone="accent"
+          value={next ? formatSlot(next.publishAt as string) : 'Belum ada'}
+          hint={next ? `${next.title} · ${channelNames[next.channelId] ?? next.channelId}` : 'Jadwalkan dari panel Publikasi'}
+        />
         <StatTile label="Menunggu" value={counts.pending} hint={counts.uploading ? `${counts.uploading} sedang diunggah` : 'Siap diunggah'} active={filter === 'pending'} onClick={() => pick('pending')} />
         <StatTile label="Perlu perhatian" value={counts.attention} tone="alert" hint={counts.attention ? 'Klik untuk melihat' : 'Tidak ada masalah'} active={filter === 'attention'} onClick={() => pick('attention')} />
         <StatTile label="Terunggah hari ini" value={counts.doneToday} tone="ok" hint={`${counts.done} total`} active={filter === 'done'} onClick={() => pick('done')} />

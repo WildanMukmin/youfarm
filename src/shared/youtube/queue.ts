@@ -42,17 +42,8 @@ export interface QueueItem {
   updatedAt: string
 }
 
-export interface QuotaSnapshot {
-  used: number
-  remaining: number
-  uploadsLeft: number
-  /** Kapan kuota direset (ISO). */
-  resetAt: string
-}
-
 export interface QueueSnapshot {
   items: QueueItem[]
-  quota: QuotaSnapshot
   running: boolean
 }
 

@@ -15,10 +15,9 @@ import { nextFreeSlots } from '@shared/youtube/schedule'
 import { createJobRegistry, isJobId } from '../modes/jobs'
 import { piper, runWithRealDeps } from '../modes/fakta-unik/runtime'
 import { getUploadQueue } from '../youtube/queue'
+import { getAccountService } from '../youtube/account'
 import { handleMediaProtocol } from '../platform/media-protocol'
 
-/** Jam tayang bawaan (waktu lokal). Pengaturan per channel menyusul. */
-const DEFAULT_SLOTS = ['07:00', '12:00', '19:00']
 const PRIVACY: Privacy[] = ['private', 'unlisted', 'public']
 
 const jobs = createJobRegistry()
@@ -87,7 +86,9 @@ export function registerModesIpc(): void {
     let publishAt: string | null = null
     if (req.schedule) {
       const occupied = queue.snapshot().items.filter((i) => i.channelId === req.channelId && i.publishAt && i.status !== 'failed').map((i) => i.publishAt as string)
-      publishAt = nextFreeSlots({ times: DEFAULT_SLOTS, occupied, now: new Date(), count: 1, tzOffsetMin: new Date().getTimezoneOffset() })[0] ?? null
+      const slots = getAccountService().status().accounts.find((a) => a.channel.id === req.channelId)?.slots ?? []
+      if (slots.length === 0) throw new Error('Channel ini belum punya jam tayang. Atur di menu Akun.')
+      publishAt = nextFreeSlots({ times: slots, occupied, now: new Date(), count: 1, tzOffsetMin: new Date().getTimezoneOffset() })[0] ?? null
     }
 
     const { video } = rec

@@ -271,3 +271,20 @@ test('accountState dan oauth helper murni', () => {
 
   assert.match(googleErrorMessage({ error: { errors: [{ reason: 'accessNotConfigured' }] } }, 403), /belum diaktifkan/)
 })
+
+test('setSlots: jam tayang tersimpan per channel dan ikut terhapus saat channel diputuskan', async () => {
+  const g = await startFakeGoogle()
+  try {
+    const { service } = makeService(g)
+    service.setCredentials(CLIENT_ID, 'rahasia')
+    await service.connect()
+    assert.deepEqual(service.status().accounts[0].slots, ['07:00', '12:00', '19:00'])
+    assert.deepEqual(service.setSlots('UC123', ['19:00', '12:00']).accounts[0].slots, ['12:00', '19:00'])
+    assert.throws(() => service.setSlots('UC123', []), /minimal satu/)
+    await service.disconnect('UC123')
+    await service.connect()
+    assert.deepEqual(service.status().accounts[0].slots, ['07:00', '12:00', '19:00'], 'channel baru mulai dari bawaan')
+  } finally {
+    closeFake(g)
+  }
+})

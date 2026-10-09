@@ -20,7 +20,7 @@ const CAUSE: Record<ErrorKind, string> = {
   item: 'Video bermasalah',
   account: 'Akun perlu dihubungkan ulang',
   retry: 'Gagal sementara',
-  quota: 'Kuota habis'
+  quota: 'Batas harian Google'
 }
 
 const MODE_LABEL = Object.fromEntries(MODE_INFO.map((m) => [m.id, m.label]))
@@ -47,7 +47,7 @@ const td = 'border-b border-line px-3 align-middle'
 
 /** Keterangan kecil di bawah status: alasan menunggu atau jumlah percobaan. */
 function statusNote(i: QueueItem): string | null {
-  if (i.status === 'queued' && i.errorKind === 'quota') return 'Menunggu kuota'
+  if (i.status === 'queued' && i.errorKind === 'quota' && i.notBefore) return `Batas harian · lanjut ${formatDateTime(i.notBefore)}`
   if (i.status === 'queued' && i.notBefore) return `Coba lagi ${formatDateTime(i.notBefore)}`
   if (i.status !== 'done' && i.attempts > 0) return `Percobaan ${i.attempts}`
   return null

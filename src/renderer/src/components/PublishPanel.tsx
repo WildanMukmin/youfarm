@@ -4,7 +4,9 @@ import type { ModeRunResult } from '@shared/ipc-channels'
 import type { Privacy } from '@shared/youtube/metadata'
 import type { YoutubeAccountInfo } from '@shared/youtube/accounts'
 import { errMsg } from '@/lib/errors'
-import { formatDateTime } from '@/lib/format'
+import { formatClock, formatDateTime, formatSlot } from '@/lib/format'
+import { upcomingSlots } from '@/lib/slots'
+import { useQueue } from '@/hooks/useQueue'
 import Button from '@/ui/Button'
 import Checkbox from '@/ui/Checkbox'
 import Notice from '@/ui/Notice'
@@ -25,6 +27,7 @@ interface Props {
 /** Masukkan video hasil ke antrean upload YouTube. Berlaku untuk semua mode produksi. */
 export default function PublishPanel({ result, onOpenQueue, onOpenAccounts }: Props) {
   const [accounts, setAccounts] = useState<YoutubeAccountInfo[] | null>(null)
+  const { snapshot } = useQueue()
   const [channelId, setChannelId] = useState('')
   const [privacy, setPrivacy] = useState<Privacy>('private')
   const [schedule, setSchedule] = useState(true)
@@ -74,6 +77,9 @@ export default function PublishPanel({ result, onOpenQueue, onOpenAccounts }: Pr
     }
   }
 
+  const channel = accounts?.find((a) => a.channel.id === channelId)
+  const nextSlot = channel ? upcomingSlots(channel.slots, snapshot?.items ?? [], channel.channel.id, 1)[0] : undefined
+
   return (
     <div className="grid gap-4">
       <div className="grid gap-4">
@@ -94,10 +100,23 @@ export default function PublishPanel({ result, onOpenQueue, onOpenAccounts }: Pr
       </div>
       <Checkbox
         label="Jadwalkan di slot tayang berikutnya"
-        hint="Slot 07.00, 12.00, dan 19.00 waktu lokal. Video diunggah sebagai pribadi lalu tayang otomatis."
+        hint={
+          channel
+            ? `Jam tayang channel ini: ${channel.slots.map(formatClock).join(', ')}. Diunggah sebagai pribadi lalu tayang otomatis.`
+            : 'Video diunggah sebagai pribadi lalu tayang otomatis di jam tayang channel.'
+        }
         checked={schedule}
         onChange={(e) => setSchedule(e.target.checked)}
       />
+      {schedule && nextSlot && (
+        <div className="rounded-sm border border-line-hi bg-bg px-3 py-2.5">
+          <div className="text-xs text-ink-muted">Akan tayang</div>
+          <div className="mt-0.5 font-mono text-sm text-ink">{formatSlot(nextSlot)}</div>
+          <button className="mt-1 text-xs text-crimson-hi underline underline-offset-2" onClick={onOpenAccounts}>
+            Ubah jam tayang
+          </button>
+        </div>
+      )}
       <div>
         <Button disabled={!channelId || busy} onClick={() => void submit()}>
           {busy ? 'Memasukkan…' : 'Masukkan ke antrean upload'}
