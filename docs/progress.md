@@ -63,6 +63,7 @@ Bila ada yang gagal, kirim pesan errornya. Titik paling mungkin: bentuk respons 
 - **Import relatif ber-ekstensi `.ts`** di file yang dites Node; hindari *parameter properties* TypeScript di sana (Node type-stripping tidak mendukungnya).
 - **Windows**: `tar` di PATH bisa GNU tar yang tidak membaca zip, jadi skrip setup memakai `C:\Windows\System32\tar.exe`. `rename` lintas drive gagal (EXDEV), jadi dipakai salin lalu hapus.
 - **Kuota** upload dihitung begitu permintaan upload dikirim, kecuali error akun. Bila Google melaporkan kuota habis, hitungan lokal disinkronkan ke habis.
+- **Profil data uji terpisah**: bila salah satu variabel uji di bawah aktif, aplikasi memakai `%APPDATA%\youfarm-test`, bukan `%APPDATA%\youfarm` milik pengguna (bisa diganti dengan `YOUFARM_USER_DATA`). Uji otomatis tidak boleh pernah menyentuh data pengguna.
 - **Variabel lingkungan khusus pengembangan** (diabaikan di build rilis): `YOUFARM_FAKE_GOOGLE`, `YOUFARM_FAKE_GEMINI`, `YOUFARM_FAKE_PEXELS` (alamat server palsu), `YOUFARM_AUTH_URL_FILE`, `YOUFARM_QUEUE_GAP="min,max"`, `YOUFARM_DEV_ENQUEUE=1`.
 - **Keamanan IPC**: renderer tidak pernah mengirim path berkas. Buka video dan masukkan ke antrean memakai `jobId` yang disimpan di main.
 

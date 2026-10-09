@@ -7,6 +7,20 @@ import { getUploadQueue, queueLoopOptions } from './youtube/queue'
 
 const BG = '#0B0709'
 
+/**
+ * Uji otomatis tidak boleh menyentuh data pengguna. Di build pengembangan, setiap variabel uji
+ * (server palsu, enqueue uji) memindahkan folder data ke profil terpisah, kecuali
+ * YOUFARM_USER_DATA menentukan folder sendiri.
+ */
+function isolateTestProfile(): void {
+  if (app.isPackaged) return
+  const explicit = process.env['YOUFARM_USER_DATA']
+  const testing = ['YOUFARM_FAKE_GOOGLE', 'YOUFARM_FAKE_GEMINI', 'YOUFARM_FAKE_PEXELS', 'YOUFARM_DEV_ENQUEUE', 'YOUFARM_AUTH_URL_FILE'].some((k) => process.env[k])
+  if (explicit) app.setPath('userData', explicit)
+  else if (testing) app.setPath('userData', join(app.getPath('appData'), 'youfarm-test'))
+}
+
+isolateTestProfile()
 registerMediaScheme()
 
 function createWindow(): void {
