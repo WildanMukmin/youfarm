@@ -73,7 +73,7 @@ export function splitWords(text: string, code: string): string[] {
 
 /* ---- Suara ---- */
 
-export const VOICE_SOURCES = ['piper', 'gemini-tts', 'deepgram'] as const
+export const VOICE_SOURCES = ['piper', 'gemini-tts', 'deepgram', 'elevenlabs'] as const
 export type VoiceSource = (typeof VOICE_SOURCES)[number]
 
 export interface VoiceOption {
@@ -108,9 +108,13 @@ export const DEEPGRAM_VOICES: Partial<Record<LanguageCode, VoiceOption[]>> = {
   ja: dg('ja', 'uzume izanami ama ebisu fujin')
 }
 
+/** Bahasa konten yang tidak dibacakan ElevenLabs Flash v2.5 (selain itu didukung). */
+const ELEVENLABS_UNSUPPORTED: readonly string[] = ['jv', 'su', 'th']
+
 /** Apakah sumber suara bisa membacakan bahasa ini. Piper bergantung pada model yang terpasang. */
 export function voiceSourceSupports(source: VoiceSource, code: string, piperLangs: string[] = []): boolean {
   if (source === 'gemini-tts') return true
+  if (source === 'elevenlabs') return !ELEVENLABS_UNSUPPORTED.includes(code)
   if (source === 'deepgram') return Boolean(DEEPGRAM_VOICES[code as LanguageCode]?.length)
   return piperLangs.includes(code)
 }

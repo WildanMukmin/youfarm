@@ -8,11 +8,19 @@ export const IPC = {
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
   secretsStatus: 'secrets:status',
-  secretsSet: 'secrets:set',
-  secretsClear: 'secrets:clear',
+  footageStats: 'footage:stats',
+  footageClear: 'footage:clear',
+  keysOverview: 'keys:overview',
+  keysAdd: 'keys:add',
+  keysRemove: 'keys:remove',
+  keysSelect: 'keys:select',
+  keysRename: 'keys:rename',
+  keysSetAuto: 'keys:set-auto',
+  keysResetLimit: 'keys:reset-limit',
   dialogSelectFolder: 'dialog:select-folder',
   aiGeminiModels: 'ai:gemini-models',
   aiGroqModels: 'ai:groq-models',
+  aiElevenLabsVoices: 'ai:elevenlabs-voices',
   ytStatus: 'youtube:status',
   ytSetCredentials: 'youtube:set-credentials',
   ytConnect: 'youtube:connect',
@@ -60,4 +68,7 @@ export interface SuggestTopicsRequest {
   /** Niche yang sudah diketik pengguna; kosong = saran bebas. */
   seed: string
   language: string
+  /** Penulis teks yang dipilih di form mode. */
+  textProvider: string
+  textModel: string
 }

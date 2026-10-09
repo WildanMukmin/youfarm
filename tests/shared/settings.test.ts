@@ -5,16 +5,15 @@ import {
   isProviderAvailable,
   splitGeminiModels,
   mergeSettings,
-  sanitizeProviders,
   type SecretStatus
 } from '../../src/shared/settings.ts'
 
 const none: SecretStatus = { gemini: false, groq: false, deepgram: false, pixabay: false, pexels: false, elevenlabs: false }
 
 test('mergeSettings menerima nilai valid dan mengabaikan yang tidak valid', () => {
-  const s = mergeSettings(DEFAULT_SETTINGS, { theme: 'light', textProvider: 'openai', bitrateKbps: 8000, evil: 1 })
+  const s = mergeSettings(DEFAULT_SETTINGS, { theme: 'light', textProvider: 'groq', geminiTtsModel: 'x', bitrateKbps: 8000, evil: 1 })
   assert.equal(s.theme, 'light')
-  assert.equal(s.textProvider, 'gemini')
+  assert.ok(!('textProvider' in s) && !('geminiTtsModel' in s), 'pilihan AI dipindah ke tiap mode')
   assert.ok(!('evil' in s))
   assert.ok(!('bitrateKbps' in s))
 })
@@ -40,18 +39,8 @@ test('provider cloud hanya tersedia bila key diisi', () => {
   assert.equal(isProviderAvailable('piper', none), true)
 })
 
-test('sanitizeProviders mengembalikan provider teks tanpa key ke default', () => {
-  assert.equal(sanitizeProviders({ ...DEFAULT_SETTINGS, textProvider: 'groq' }, none).textProvider, 'gemini')
-  assert.equal(sanitizeProviders({ ...DEFAULT_SETTINGS, textProvider: 'groq' }, { ...none, groq: true }).textProvider, 'groq')
-})
-
 test('splitGeminiModels memisahkan model teks dan model suara', () => {
   const r = splitGeminiModels(['gemini-2.5-flash', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-flash-image', 'gemini-embedding-001', 'gemini-2.5-pro'])
   assert.deepEqual(r.text, ['gemini-2.5-flash', 'gemini-2.5-pro'])
   assert.deepEqual(r.tts, ['gemini-2.5-flash-preview-tts'])
-})
-
-test('mergeSettings: model Gemini dirapikan dan dibatasi', () => {
-  assert.equal(mergeSettings(DEFAULT_SETTINGS, { geminiTtsModel: '  gemini-tts  ' }).geminiTtsModel, 'gemini-tts')
-  assert.equal(mergeSettings(DEFAULT_SETTINGS, { geminiTtsModel: 'x'.repeat(200) }).geminiTtsModel, '')
 })

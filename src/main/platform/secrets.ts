@@ -1,9 +1,10 @@
 import { app, safeStorage } from 'electron'
 import { join } from 'node:path'
-import { SECRET_KEYS, type SecretKey, type SecretStatus } from '@shared/settings'
-import { createSecretStore, type Codec, type SecretStore } from './secret-store'
+import type { SecretKey, SecretStatus } from '@shared/settings'
+import { createApiKeys, type ApiKeys } from './api-keys'
+import { createSecretStore, type Codec } from './secret-store'
 
-let store: SecretStore | null = null
+let keys: ApiKeys | null = null
 
 /** Enkripsi bawaan sistem (DPAPI di Windows). Dipakai juga oleh penyimpanan token YouTube. */
 export const systemCodec: Codec = {
@@ -14,18 +15,17 @@ export const systemCodec: Codec = {
   decrypt: (cipher) => safeStorage.decryptString(Buffer.from(cipher, 'base64'))
 }
 
-function getStore(): SecretStore {
-  if (!store) store = createSecretStore(join(app.getPath('userData'), 'secrets.json'), systemCodec)
-  return store
+/** Daftar key per penyedia. Nilai key terenkripsi di secrets.json; nama dan pilihan aktif di api-keys.json. */
+export function getApiKeys(): ApiKeys {
+  if (!keys) {
+    const dir = app.getPath('userData')
+    keys = createApiKeys({ metaFile: join(dir, 'api-keys.json'), secrets: createSecretStore(join(dir, 'secrets.json'), systemCodec) })
+  }
+  return keys
 }
 
-/** Status "sudah diisi" tanpa menampilkan nilainya. */
-export function secretStatus(): SecretStatus {
-  const s = getStore()
-  return Object.fromEntries(SECRET_KEYS.map((k) => [k, s.has(k)])) as SecretStatus
-}
+/** Status "sudah ada key" tanpa menampilkan nilainya. */
+export const secretStatus = (): SecretStatus => getApiKeys().status()
 
-export const setSecret = (name: SecretKey, value: string): void => getStore().set(name, value)
-export const clearSecret = (name: SecretKey): void => getStore().clear(name)
-/** Dipakai modul main (klien AI). Tidak diekspos lewat IPC. */
-export const getSecret = (name: SecretKey): string | undefined => getStore().get(name)
+/** Dipakai modul main (klien AI). Tidak diekspos lewat IPC. Memberi key yang sedang dipakai penyedia itu. */
+export const getSecret = (name: SecretKey): string | undefined => getApiKeys().current(name)

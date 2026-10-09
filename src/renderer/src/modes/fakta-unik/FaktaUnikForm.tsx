@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from
 import { toast } from 'sonner'
 import { MAX_BATCH, splitTopics } from '@shared/production'
 import { TARGET_SECONDS, type FaktaUnikOptions } from '@shared/modes/fakta-unik'
-import { DEEPGRAM_VOICES, GEMINI_VOICES, LANGUAGE_LIST, languageInfo, voiceSourceSupports, type LanguageCode, type VoiceSource } from '@shared/languages'
-import type { SecretStatus, Settings } from '@shared/settings'
+import { TEXT_PROVIDERS } from '@shared/settings'
+import { DEEPGRAM_VOICES, GEMINI_VOICES, LANGUAGE_LIST, languageInfo, voiceSourceSupports, type LanguageCode, type VoiceOption, type VoiceSource } from '@shared/languages'
+import type { SecretStatus } from '@shared/settings'
 import { STOCK_INFO, STOCK_SOURCES } from '@shared/stock'
 import type { VoiceCatalog } from '@shared/ipc-channels'
 import CaptionEditor from '@/components/CaptionEditor'
+import ModelSelect from '@/components/ModelSelect'
 import TopicSuggestions from '@/components/TopicSuggestions'
+import { useModelList } from '@/hooks/useModelList'
 import { useSettings } from '@/hooks/useSettings'
 import { useStickyState } from '@/hooks/useStickyState'
 import { refreshQueues } from '@/hooks/useQueue'
@@ -38,13 +41,15 @@ interface Props {
 const VOICE_HINT: Record<VoiceSource, string> = {
   piper: 'Gratis dan berjalan offline, kualitas sedang.',
   'gemini-tts': 'Paling natural untuk bahasa Indonesia dan banyak bahasa lain. Memakai kuota Gemini.',
-  deepgram: 'Natural untuk Inggris, Spanyol, Jerman, Prancis, Belanda, Italia, dan Jepang. Berbayar per karakter.'
+  deepgram: 'Natural untuk Inggris, Spanyol, Jerman, Prancis, Belanda, Italia, dan Jepang. Berbayar per karakter.',
+  elevenlabs: 'Suara paling hidup, mendukung Indonesia dan hampir semua bahasa lain. Paket gratis tidak boleh untuk konten komersial.'
 }
 
 /** Penulis naskah belum siap: alasan singkat, atau null bila siap. */
-function textWriterIssue(settings: Settings, status: SecretStatus): string | null {
-  if (settings.textProvider === 'groq') return !status.groq ? 'Isi key Groq.' : !settings.groqTextModel ? 'Pilih model Groq untuk teks.' : null
-  return !status.gemini ? 'Isi key Gemini.' : !settings.geminiTextModel ? 'Pilih model Gemini untuk teks.' : null
+function textWriterIssue(opts: FaktaUnikOptions, status: SecretStatus): string | null {
+  const name = opts.textProvider === 'groq' ? 'Groq' : 'Gemini'
+  if (!status[opts.textProvider]) return `Isi key ${name}.`
+  return opts.textModel ? null : `Pilih model ${name} untuk naskah.`
 }
 
 /** Panel input mode Fakta Unik: tab Konten, Suara, dan Caption. Isian bertahan saat pindah menu. */
@@ -59,6 +64,23 @@ export default function FaktaUnikForm({ opts, setOpts, tab, onTab, onQueued, onO
     void window.youfarm?.modes.voices().then(setVoices)
   }, [])
 
+  // Suara ElevenLabs berbeda tiap akun, jadi daftarnya diambil dari API begitu sumber ini dipilih.
+  const [elevenVoices, setElevenVoices] = useState<VoiceOption[]>([])
+  const [elevenError, setElevenError] = useState<string | null>(null)
+  const elevenReady = opts.voiceSource === 'elevenlabs' && Boolean(status?.elevenlabs)
+  useEffect(() => {
+    if (!elevenReady) return
+    let live = true
+    setElevenError(null)
+    window.youfarm.ai.elevenlabsVoices().then(
+      (list) => live && setElevenVoices(list),
+      (e) => live && setElevenError(errMsg(e, 'Gagal memuat suara ElevenLabs.'))
+    )
+    return () => {
+      live = false
+    }
+  }, [elevenReady, status?.elevenlabs])
+
   const lang = languageInfo(opts.language)
   const piperLangs = useMemo(() => [...new Set((voices?.piper ?? []).map((v) => v.lang))], [voices])
   const supports = (src: VoiceSource, code: string = opts.language): boolean => voiceSourceSupports(src, code, piperLangs)
@@ -66,10 +88,17 @@ export default function FaktaUnikForm({ opts, setOpts, tab, onTab, onQueued, onO
   const voiceChoices = useMemo(() => {
     if (opts.voiceSource === 'gemini-tts') return GEMINI_VOICES
     if (opts.voiceSource === 'deepgram') return DEEPGRAM_VOICES[opts.language] ?? []
+    if (opts.voiceSource === 'elevenlabs') return elevenVoices
     return (voices?.piper ?? []).filter((v) => v.lang === opts.language).map((v) => ({ id: v.name, label: v.name }))
-  }, [opts.voiceSource, opts.language, voices])
+  }, [opts.voiceSource, opts.language, voices, elevenVoices])
 
-  const writerIssue = settings && status ? textWriterIssue(settings, status) : null
+  const writerIssue = status ? textWriterIssue(opts, status) : null
+
+  // Daftar model diambil dari API penyedia yang dipilih di form ini (bukan dari Settings).
+  const usesGemini = opts.textProvider === 'gemini' || opts.voiceSource === 'gemini-tts'
+  const gemini = useModelList('gemini', Boolean(status?.gemini) && usesGemini)
+  const groq = useModelList('groq', Boolean(status?.groq) && opts.textProvider === 'groq')
+  const writer = opts.textProvider === 'groq' ? groq : gemini
 
   // Yang masih harus disiapkan sebelum video bisa dibuat.
   const issues = useMemo(() => {
@@ -81,10 +110,11 @@ export default function FaktaUnikForm({ opts, setOpts, tab, onTab, onQueued, onO
     if (!voiceSourceSupports(opts.voiceSource, opts.language, piperLangs)) out.push(`Sumber suara ini belum mendukung bahasa ${lang.label}. Pilih sumber lain di tab Suara.`)
     else if (opts.voiceSource === 'gemini-tts') {
       if (!status.gemini) out.push('Isi key Gemini (untuk suara).')
-      else if (!settings.geminiTtsModel) out.push('Pilih model Gemini untuk suara (TTS).')
+      else if (!opts.ttsModel) out.push('Pilih model Gemini untuk suara (TTS).')
     } else if (opts.voiceSource === 'deepgram' && !status.deepgram) out.push('Isi key Deepgram (untuk suara).')
+    else if (opts.voiceSource === 'elevenlabs' && !status.elevenlabs) out.push('Isi key ElevenLabs (untuk suara).')
     return out
-  }, [settings, status, voices, writerIssue, opts.voiceSource, opts.stockSource, opts.language, piperLangs, lang.label])
+  }, [settings, status, voices, writerIssue, opts.ttsModel, opts.voiceSource, opts.stockSource, opts.language, piperLangs, lang.label])
 
   const loaded = Boolean(settings && status && voices)
   const topics = useMemo(() => splitTopics(opts.topic), [opts.topic])
@@ -184,7 +214,9 @@ export default function FaktaUnikForm({ opts, setOpts, tab, onTab, onQueued, onO
             mode="fakta-unik"
             language={opts.language}
             current={topics}
-            disabledReason={writerIssue ? `${writerIssue.replace(/\.$/, '')} di Settings > API untuk memakai saran topik.` : null}
+            textProvider={opts.textProvider}
+            textModel={opts.textModel}
+            disabledReason={writerIssue ? `${writerIssue.replace(/\.$/, '')} untuk memakai saran topik.` : null}
             onAdd={addTopics}
           />
 
@@ -201,6 +233,25 @@ export default function FaktaUnikForm({ opts, setOpts, tab, onTab, onQueued, onO
               value={String(opts.targetSec) as `${(typeof TARGET_SECONDS)[number]}`}
               onChange={(v) => set('targetSec', Number(v) as FaktaUnikOptions['targetSec'])}
               options={TARGET_SECONDS.map((s) => ({ value: String(s) as `${typeof s}`, label: `${s}s` }))}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Segmented
+              label="Penulis naskah"
+              value={opts.textProvider}
+              onChange={(v) => setOpts((o) => ({ ...o, textProvider: v, textModel: '' }))}
+              options={TEXT_PROVIDERS.map((p) => ({ value: p, label: p === 'groq' ? 'Groq' : 'Gemini', disabled: status ? !status[p] : false, title: status && !status[p] ? `Isi key ${p === 'groq' ? 'Groq' : 'Gemini'} dulu di Settings > API` : undefined }))}
+            />
+            <ModelSelect
+              label="Model naskah"
+              value={opts.textModel}
+              options={writer.text}
+              loading={writer.loading}
+              error={writer.error}
+              blockedReason={status && !status[opts.textProvider] ? `Isi key ${opts.textProvider === 'groq' ? 'Groq' : 'Gemini'} di Settings > API untuk memuat model.` : null}
+              onChange={(m) => set('textModel', m)}
+              onReload={() => void writer.reload()}
             />
           </div>
 
@@ -229,7 +280,8 @@ export default function FaktaUnikForm({ opts, setOpts, tab, onTab, onQueued, onO
                 [
                   { value: 'piper', label: 'Piper', title: supports('piper') ? 'Lokal, offline' : `Belum ada suara Piper ${lang.label}` },
                   { value: 'gemini-tts', label: 'Gemini TTS' },
-                  { value: 'deepgram', label: 'Deepgram', title: supports('deepgram') ? undefined : `Deepgram belum punya suara ${lang.label}` }
+                  { value: 'deepgram', label: 'Deepgram', title: supports('deepgram') ? undefined : `Deepgram belum punya suara ${lang.label}` },
+                  { value: 'elevenlabs', label: 'ElevenLabs', title: supports('elevenlabs') ? undefined : `ElevenLabs belum mendukung ${lang.label}` }
                 ] satisfies { value: VoiceSource; label: string; title?: string }[]
               ).map((o) => ({ ...o, disabled: !supports(o.value) }))}
             />
@@ -237,13 +289,29 @@ export default function FaktaUnikForm({ opts, setOpts, tab, onTab, onQueued, onO
           </div>
 
           <Select label="Suara" value={opts.voiceName} onChange={(e) => set('voiceName', e.target.value)} disabled={voiceChoices.length === 0}>
-            <option value="">Bawaan</option>
+            <option value="">{opts.voiceSource === 'elevenlabs' ? 'Suara pertama di akun' : 'Bawaan'}</option>
             {voiceChoices.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.label}
               </option>
             ))}
           </Select>
+          {opts.voiceSource === 'gemini-tts' && (
+            <ModelSelect
+              label="Model suara Gemini"
+              value={opts.ttsModel}
+              options={gemini.tts}
+              loading={gemini.loading}
+              error={gemini.error}
+              blockedReason={status && !status.gemini ? 'Isi key Gemini di Settings > API untuk memuat model.' : null}
+              onChange={(m) => set('ttsModel', m)}
+              onReload={() => void gemini.reload()}
+            />
+          )}
+          {opts.voiceSource === 'gemini-tts' && <p className="-mt-2 text-xs text-ink-muted">Model Flash punya jatah gratis; model Pro tidak. Satu video memakai satu permintaan suara.</p>}
+          {opts.voiceSource === 'elevenlabs' && (
+            <p className="text-xs text-ink-muted">{elevenError ?? (elevenReady ? 'Daftar suara diambil dari akun ElevenLabs Anda. Suara dari Voice Library butuh paket berbayar.' : 'Isi key ElevenLabs di Settings > API untuk memuat suara.')}</p>
+          )}
           {opts.voiceSource === 'gemini-tts' && <p className="text-xs text-ink-muted">Bahasa dibaca otomatis dari naskah, jadi semua suara Gemini bisa dipakai untuk bahasa apa pun.</p>}
         </div>
       )}

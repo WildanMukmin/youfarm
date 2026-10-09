@@ -4,9 +4,8 @@ import { useStickyState } from '@/hooks/useStickyState'
 import Workspace from '@/layout/Workspace'
 import PanelTabs from '@/ui/PanelTabs'
 import ScrollArea from '@/ui/ScrollArea'
-import ApiKeysCard from './ApiKeysCard'
+import ApiKeysPanel from './ApiKeysPanel'
 import AppearanceCard from './AppearanceCard'
-import ProvidersCard from './ProvidersCard'
 import StorageCard from './StorageCard'
 
 type TabId = 'general' | 'api'
@@ -18,7 +17,7 @@ export default function SettingsView() {
   return (
     <Workspace
       title="Settings"
-      subtitle="Pengaturan umum. Opsi teknis (suara, caption, render) ada di tiap mode."
+      subtitle="Pengaturan umum dan API key. Pilihan AI, suara, caption, dan render ada di tiap mode."
       tabs={
         <PanelTabs
           variant="bar"
@@ -33,19 +32,12 @@ export default function SettingsView() {
       }
     >
       <ScrollArea className="p-6">
-        {settings && status ? (
+        {tab === 'api' ? (
+          <ApiKeysPanel onStatus={changeSecrets} />
+        ) : settings && status ? (
           <div className="mx-auto grid max-w-6xl grid-cols-[repeat(auto-fit,minmax(340px,1fr))] items-start gap-5">
-            {tab === 'general' ? (
-              <>
-                <StorageCard settings={settings} onUpdate={(p) => void update(p)} />
-                <AppearanceCard settings={settings} onUpdate={(p) => void update(p)} />
-              </>
-            ) : (
-              <>
-                <ApiKeysCard status={status} onChange={(s) => void changeSecrets(s)} />
-                <ProvidersCard settings={settings} status={status} onUpdate={(p) => void update(p)} />
-              </>
-            )}
+            <StorageCard settings={settings} onUpdate={(p) => void update(p)} />
+            <AppearanceCard settings={settings} onUpdate={(p) => void update(p)} />
           </div>
         ) : (
           <p className="text-ink-muted">Memuat…</p>

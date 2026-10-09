@@ -5,9 +5,11 @@ import type { ProductionDetail, ProductionEnqueueRequest, ProductionPublishReque
 import { isChannelId } from '@shared/youtube/accounts'
 import type { Privacy } from '@shared/youtube/metadata'
 import { getAccountService } from '../youtube/account'
+import { getUploadQueue } from '../youtube/queue'
 import { handleMediaProtocol } from '../platform/media-protocol'
 import { enqueueRendered } from '../modes/publish'
 import { getProductionQueue, pauseProductionQueue, resumeProductionQueue } from '../production'
+import { deleteVideoFiles } from '../production/files'
 
 const PRIVACY: Privacy[] = ['private', 'unlisted', 'public']
 
@@ -26,9 +28,27 @@ function publishPlan(v: unknown): PublishPlan | null {
   return { channelId, privacy: PRIVACY.includes(p.privacy as Privacy) ? (p.privacy as Privacy) : 'private', schedule: p.schedule === true }
 }
 
-export function registerProductionIpc(): void {
-  const q = getProductionQueue
+/**
+ * Hapus video jadi beserta berkasnya (mp4, thumbnail, SRT) dari komputer. Upload yang masih menunggu ikut dibatalkan
+ * karena berkasnya hilang; upload yang sedang berjalan menolak penghapusan. Gagal menghapus berkas (mis. sedang
+ * diputar) membatalkan semuanya supaya daftar dan isi folder tetap cocok.
+ */
+async function removeWithFiles(id: number): Promise<void> {
+  const res = q().result(id)
+  if (!res) return q().remove(id)
+  const uploadId = q().detail(id)?.uploadId
+  const upload = uploadId ? getUploadQueue().snapshot().items.find((i) => i.id === uploadId) : undefined
+  if (upload?.status === 'uploading') throw new Error('Video ini sedang diunggah. Tunggu selesai, lalu hapus.')
 
+  const { filePath, thumbnailPath, captionPath } = res.video
+  await deleteVideoFiles([filePath, thumbnailPath, captionPath])
+  if (upload && upload.status !== 'done') getUploadQueue().remove(upload.id)
+  q().remove(id)
+}
+
+const q = getProductionQueue
+
+export function registerProductionIpc(): void {
   // Pratinjau di renderer: id job dikenali main, path berkas tidak pernah datang dari renderer.
   handleMediaProtocol((id, kind) => {
     if (!/^\d{1,9}$/.test(id)) return undefined
@@ -55,7 +75,7 @@ export function registerProductionIpc(): void {
   })
   ipcMain.handle(IPC.prodCancel, (_e, id: unknown): ProductionSnapshot => (q().cancel(jobId(id)), q().snapshot()))
   ipcMain.handle(IPC.prodRetry, (_e, id: unknown): ProductionSnapshot => (q().retry(jobId(id)), q().snapshot()))
-  ipcMain.handle(IPC.prodRemove, (_e, id: unknown): ProductionSnapshot => (q().remove(jobId(id)), q().snapshot()))
+  ipcMain.handle(IPC.prodRemove, async (_e, id: unknown): Promise<ProductionSnapshot> => (await removeWithFiles(jobId(id)), q().snapshot()))
   ipcMain.handle(IPC.prodPause, (): ProductionSnapshot => (pauseProductionQueue(), q().snapshot()))
   ipcMain.handle(IPC.prodResume, (): ProductionSnapshot => (resumeProductionQueue(), q().snapshot()))
 

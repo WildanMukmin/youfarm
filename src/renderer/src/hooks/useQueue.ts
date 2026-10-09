@@ -85,7 +85,7 @@ export function useQueue() {
     prod: {
       cancel: (id: number) => act(() => window.youfarm.production.cancel(id), prod, 'Dibatalkan.'),
       retry: (id: number) => act(() => window.youfarm.production.retry(id), prod, 'Dimasukkan lagi ke antrean produksi.'),
-      remove: (id: number) => act(() => window.youfarm.production.remove(id), prod, 'Dihapus dari antrean produksi.'),
+      remove: (id: number) => act(() => window.youfarm.production.remove(id), prod, 'Video dihapus.'),
       pause: () => act(() => window.youfarm.production.pause(), prod, 'Antrean produksi dijeda.'),
       resume: () => act(() => window.youfarm.production.resume(), prod, 'Antrean produksi dilanjutkan.'),
       open: (id: number, what: 'file' | 'folder') => act(() => window.youfarm.production.open(id, what), () => undefined)

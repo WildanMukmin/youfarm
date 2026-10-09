@@ -16,6 +16,8 @@ export function registerModesIpc(): void {
     const language = typeof req.language === 'string' ? req.language : 'id'
     // Judul yang sudah pernah jadi ikut dikirim supaya saran tidak mengulang.
     const avoid = getProductionQueue().recentTitles('fakta-unik')
-    return parseTopics(await getTextLlm()({ ...buildTopicPrompt({ seed, language, avoid }), temperature: 1 }))
+    const provider = req.textProvider === 'groq' ? 'groq' : 'gemini'
+    const model = typeof req.textModel === 'string' ? req.textModel.trim().slice(0, 100) : ''
+    return parseTopics(await getTextLlm({ provider, model })({ ...buildTopicPrompt({ seed, language, avoid }), temperature: 1 }))
   })
 }

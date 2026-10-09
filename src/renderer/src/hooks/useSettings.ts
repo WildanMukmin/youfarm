@@ -25,11 +25,8 @@ export function useSettings() {
     }
   }, [])
 
-  /** Dipanggil setelah key berubah: pilihan provider di main bisa ikut berubah. */
-  const changeSecrets = useCallback(async (next: SecretStatus) => {
-    setStatus(next)
-    setSettings(await window.youfarm.settings.get())
-  }, [])
+  /** Dipanggil setelah daftar key berubah. */
+  const changeSecrets = useCallback((next: SecretStatus) => setStatus(next), [])
 
   return { settings, status, update, changeSecrets }
 }

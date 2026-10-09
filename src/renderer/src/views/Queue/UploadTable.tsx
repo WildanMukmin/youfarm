@@ -3,7 +3,7 @@ import { MODE_INFO } from '@shared/contracts/modes'
 import type { ErrorKind } from '@shared/youtube/errors'
 import type { QueueItem, UploadStatus } from '@shared/youtube/queue'
 import { formatDateTime } from '@/lib/format'
-import IconButton from '@/ui/IconButton'
+import IconButton, { IconGap } from '@/ui/IconButton'
 import StatusChip from '@/ui/StatusChip'
 
 type Tone = 'active' | 'done' | 'warn' | 'error' | 'idle'
@@ -109,9 +109,18 @@ export default function UploadTable({ density, rows, channelNames, onRetry, onRe
               {showUpdated && <td className={`${td} tabular whitespace-nowrap font-mono text-xs text-ink-muted`}>{formatDateTime(i.updatedAt)}</td>}
               <td className={td}>
                 <div className="flex justify-end gap-1.5">
-                  {attention && <IconButton icon={RotateCcw} tone="primary" label="Coba lagi" onClick={() => onRetry(i.id)} />}
-                  {i.status === 'done' && i.videoId && <IconButton icon={ExternalLink} label="Buka di YouTube Studio" onClick={() => onOpen(i.id)} />}
-                  {i.status !== 'uploading' && <IconButton icon={Trash} label="Hapus dari antrean" confirm="Hapus?" onClick={() => onRemove(i.id)} />}
+                  {attention ? (
+                    <IconButton icon={RotateCcw} tone="primary" label="Coba lagi" onClick={() => onRetry(i.id)} />
+                  ) : i.status === 'done' && i.videoId ? (
+                    <IconButton icon={ExternalLink} label="Buka di YouTube Studio" onClick={() => onOpen(i.id)} />
+                  ) : (
+                    <IconGap />
+                  )}
+                  {i.status === 'uploading' ? (
+                    <IconGap />
+                  ) : (
+                    <IconButton icon={Trash} label="Hapus dari antrean" confirm={{ message: 'Hapus dari antrean upload? Berkas video tetap ada di daftar Produksi.', action: 'Hapus' }} onClick={() => onRemove(i.id)} />
+                  )}
                 </div>
               </td>
             </tr>

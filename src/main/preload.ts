@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { EnqueueRequest } from '@shared/youtube/queue'
 import type { ProductionDetail, ProductionEnqueueRequest, ProductionPublishRequest, ProductionPublishResult, ProductionSnapshot } from '@shared/production'
+import type { ApiKeysOverview } from '@shared/api-keys'
+import type { FootageInfo } from '@shared/footage'
+import type { VoiceOption } from '@shared/languages'
 import type { TopicSuggestion } from '@shared/modes/fakta-unik'
 import {
   IPC,
@@ -26,12 +29,24 @@ const api = {
   },
   ai: {
     geminiModels: (): Promise<string[]> => ipcRenderer.invoke(IPC.aiGeminiModels),
-    groqModels: (): Promise<string[]> => ipcRenderer.invoke(IPC.aiGroqModels)
+    groqModels: (): Promise<string[]> => ipcRenderer.invoke(IPC.aiGroqModels),
+    elevenlabsVoices: (): Promise<VoiceOption[]> => ipcRenderer.invoke(IPC.aiElevenLabsVoices)
   },
   secrets: {
-    status: (): Promise<SecretStatus> => ipcRenderer.invoke(IPC.secretsStatus),
-    set: (name: SecretKey, value: string): Promise<SecretStatus> => ipcRenderer.invoke(IPC.secretsSet, name, value),
-    clear: (name: SecretKey): Promise<SecretStatus> => ipcRenderer.invoke(IPC.secretsClear, name)
+    status: (): Promise<SecretStatus> => ipcRenderer.invoke(IPC.secretsStatus)
+  },
+  footage: {
+    stats: (): Promise<FootageInfo> => ipcRenderer.invoke(IPC.footageStats),
+    clear: (): Promise<FootageInfo> => ipcRenderer.invoke(IPC.footageClear)
+  },
+  keys: {
+    overview: (): Promise<ApiKeysOverview> => ipcRenderer.invoke(IPC.keysOverview),
+    add: (provider: SecretKey, label: string, value: string): Promise<ApiKeysOverview> => ipcRenderer.invoke(IPC.keysAdd, provider, label, value),
+    remove: (provider: SecretKey, id: string): Promise<ApiKeysOverview> => ipcRenderer.invoke(IPC.keysRemove, provider, id),
+    select: (provider: SecretKey, id: string): Promise<ApiKeysOverview> => ipcRenderer.invoke(IPC.keysSelect, provider, id),
+    rename: (provider: SecretKey, id: string, label: string): Promise<ApiKeysOverview> => ipcRenderer.invoke(IPC.keysRename, provider, id, label),
+    setAuto: (provider: SecretKey, auto: boolean): Promise<ApiKeysOverview> => ipcRenderer.invoke(IPC.keysSetAuto, provider, auto),
+    resetLimit: (provider: SecretKey, id: string): Promise<ApiKeysOverview> => ipcRenderer.invoke(IPC.keysResetLimit, provider, id)
   },
   youtube: {
     status: (): Promise<YoutubeAccountStatus> => ipcRenderer.invoke(IPC.ytStatus),

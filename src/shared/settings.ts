@@ -9,26 +9,25 @@ export type SecretKey = (typeof SECRET_KEYS)[number]
 export type SecretStatus = Record<SecretKey, boolean>
 
 export const THEMES = ['dark', 'light', 'system'] as const
+/** Penyedia AI penulis naskah. Dipilih di tiap mode, bukan di Settings. */
 export const TEXT_PROVIDERS = ['gemini', 'groq'] as const
+export type TextProvider = (typeof TEXT_PROVIDERS)[number]
 
 export interface Settings {
   theme: (typeof THEMES)[number]
   importDir: string | null
   outputDir: string | null
-  textProvider: (typeof TEXT_PROVIDERS)[number]
-  geminiTextModel: string
-  geminiTtsModel: string
-  groqTextModel: string
+  /** Batas ukuran pustaka footage lokal, dalam GB. */
+  footageCapGb: number
 }
+
+export const FOOTAGE_CAPS_GB = [2, 5, 10, 20, 50, 100] as const
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'dark',
   importDir: null,
   outputDir: null,
-  textProvider: 'gemini',
-  geminiTextModel: '',
-  geminiTtsModel: '',
-  groqTextModel: ''
+  footageCapGb: 5
 }
 
 /** Provider -> key yang dibutuhkan. Provider lokal tidak butuh key. Dipakai juga oleh opsi tiap mode. */
@@ -36,6 +35,7 @@ const PROVIDER_KEY: Record<string, SecretKey | undefined> = {
   gemini: 'gemini',
   groq: 'groq',
   deepgram: 'deepgram',
+  elevenlabs: 'elevenlabs',
   'gemini-tts': 'gemini',
   pixabay: 'pixabay',
   pexels: 'pexels',
@@ -43,7 +43,7 @@ const PROVIDER_KEY: Record<string, SecretKey | undefined> = {
   'whisper-local': undefined
 }
 
-/** Provider cloud hanya bisa dipilih bila key-nya sudah diisi. */
+/** Provider cloud hanya bisa dipilih bila ada key-nya. */
 export function isProviderAvailable(provider: string, status: SecretStatus): boolean {
   const key = PROVIDER_KEY[provider]
   return key === undefined ? true : status[key]
@@ -60,24 +60,13 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
   const next: Settings = { ...base }
 
   if (oneOf(THEMES, p.theme)) next.theme = p.theme
-  if (oneOf(TEXT_PROVIDERS, p.textProvider)) next.textProvider = p.textProvider
 
   for (const k of ['importDir', 'outputDir'] as const) {
     const v = p[k]
     if (v === null) next[k] = null
     else if (typeof v === 'string' && v.length > 0 && v.length <= 1024) next[k] = v
   }
-  for (const k of ['geminiTextModel', 'geminiTtsModel', 'groqTextModel'] as const) {
-    const v = p[k]
-    if (typeof v === 'string' && v.length <= 100) next[k] = v.trim()
-  }
-  return next
-}
-
-/** Mundurkan provider teks yang key-nya belum ada ke default. */
-export function sanitizeProviders(s: Settings, status: SecretStatus): Settings {
-  const next = { ...s }
-  if (!isProviderAvailable(next.textProvider, status)) next.textProvider = DEFAULT_SETTINGS.textProvider
+  if (typeof p.footageCapGb === 'number' && Number.isInteger(p.footageCapGb) && p.footageCapGb >= 1 && p.footageCapGb <= 500) next.footageCapGb = p.footageCapGb
   return next
 }
 

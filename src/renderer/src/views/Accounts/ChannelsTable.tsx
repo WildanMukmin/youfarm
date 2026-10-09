@@ -1,7 +1,7 @@
 import { CalendarClock, Link2, RefreshCw, Unplug } from 'lucide-react'
 import type { AccountState, YoutubeAccountInfo } from '@shared/youtube/accounts'
 import { formatClock, formatDate, formatDateTime } from '@/lib/format'
-import IconButton from '@/ui/IconButton'
+import IconButton, { IconGap } from '@/ui/IconButton'
 import StatusChip from '@/ui/StatusChip'
 
 type Tone = 'done' | 'idle' | 'error' | 'warn'
@@ -100,10 +100,10 @@ export default function ChannelsTable({ density, rows, busyId, connecting, onCon
               {showDates && <td className={`${td} tabular whitespace-nowrap font-mono text-xs text-ink-muted`}>{formatDate(a.testingExpiryAt)}</td>}
               <td className={td}>
                 <div className="flex justify-end gap-1.5">
-                  {needs && <IconButton icon={Link2} tone="primary" label="Hubungkan ulang" disabled={connecting || busy} onClick={onConnect} />}
+                  {needs ? <IconButton icon={Link2} tone="primary" label="Hubungkan ulang" disabled={connecting || busy} onClick={onConnect} /> : <IconGap />}
                   <IconButton icon={CalendarClock} label="Atur jam tayang" onClick={() => onSchedule(a.channel.id)} />
                   <IconButton icon={RefreshCw} label={busy ? 'Memeriksa…' : 'Cek token'} disabled={busy || connecting} onClick={() => onCheck(a.channel.id)} />
-                  <IconButton icon={Unplug} label="Putuskan" confirm="Yakin?" disabled={busy || connecting} onClick={() => onDisconnect(a.channel.id)} />
+                  <IconButton icon={Unplug} label="Putuskan" confirm={{ message: 'Putuskan channel ini dari YouFarm? Video yang sudah diunggah tetap ada di YouTube.', action: 'Putuskan' }} disabled={busy || connecting} onClick={() => onDisconnect(a.channel.id)} />
                 </div>
               </td>
             </tr>

@@ -38,10 +38,14 @@ export interface StockClient {
  * Pilih footage untuk satu segmen: belum dipakai, durasi tidak terlalu pendek (agar tidak terlihat
  * berulang), dan lebih disukai yang berorientasi vertikal.
  */
-export function pickVideo(candidates: StockVideo[], p: { neededSec: number; used: Set<number> }): StockVideo | null {
+export function pickVideo(candidates: StockVideo[], p: { neededSec: number; used: Set<number>; avoid?: Set<number>; rng?: () => number }): StockVideo | null {
   const fresh = candidates.filter((c) => !p.used.has(c.id))
+  // Klip yang baru dipakai video lain dihindari bila masih ada pilihan lain.
+  const pool = p.avoid ? (fresh.some((c) => !p.avoid!.has(c.id)) ? fresh.filter((c) => !p.avoid!.has(c.id)) : fresh) : fresh
   const score = (c: StockVideo): number => (c.height >= c.width ? 100 : 0) + Math.min(c.duration, p.neededSec) * 5 + (c.duration >= p.neededSec ? 20 : 0)
-  return fresh.sort((a, b) => score(b) - score(a))[0] ?? null
+  const ranked = pool.sort((a, b) => score(b) - score(a))
+  // Dengan `rng`, pilih acak di antara beberapa yang terbaik supaya dua video tidak selalu mendapat klip yang sama.
+  return ranked[p.rng ? Math.floor(Math.min(ranked.length, 3) * p.rng()) : 0] ?? null
 }
 
 /** Unduh `video` ke `<cacheDir>/<prefix>-<id>.mp4` lewat berkas .part; berkas yang sudah ada dipakai ulang. */

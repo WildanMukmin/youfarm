@@ -5,6 +5,7 @@
 
 import { CAPTION_TEMPLATES, DEFAULT_CAPTION, sanitizeCaption, type CaptionStyle } from '../captions.ts'
 import { LANGUAGE_CODES, VOICE_SOURCES, languageInfo, speechUnits, type LanguageCode, type VoiceSource } from '../languages.ts'
+import { TEXT_PROVIDERS, type TextProvider } from '../settings.ts'
 import { STOCK_SOURCES } from '../stock.ts'
 
 export const TARGET_SECONDS = [30, 45, 60] as const
@@ -12,6 +13,11 @@ export const TARGET_SECONDS = [30, 45, 60] as const
 export interface FaktaUnikOptions {
   /** Topik atau niche, mis. "fakta aneh tentang laut dalam". */
   topic: string
+  /** Penyedia AI dan model penulis naskah. Model kosong = belum dipilih. */
+  textProvider: TextProvider
+  textModel: string
+  /** Model Gemini untuk suara (dipakai bila sumber suara Gemini TTS). */
+  ttsModel: string
   language: LanguageCode
   targetSec: (typeof TARGET_SECONDS)[number]
   voiceSource: VoiceSource
@@ -26,6 +32,9 @@ export interface FaktaUnikOptions {
 
 export const DEFAULT_OPTIONS: FaktaUnikOptions = {
   topic: '',
+  textProvider: 'gemini',
+  textModel: '',
+  ttsModel: '',
   language: 'id',
   targetSec: 45,
   voiceSource: 'piper',
@@ -67,6 +76,9 @@ export function validateOptions(input: unknown): FaktaUnikOptions {
 
   return {
     topic,
+    textProvider: pick(TEXT_PROVIDERS, o.textProvider, DEFAULT_OPTIONS.textProvider),
+    textModel: typeof o.textModel === 'string' ? o.textModel.trim().slice(0, 100) : '',
+    ttsModel: typeof o.ttsModel === 'string' ? o.ttsModel.trim().slice(0, 100) : '',
     language: pick(LANGUAGE_CODES, o.language, DEFAULT_OPTIONS.language),
     targetSec: pick(TARGET_SECONDS, o.targetSec, DEFAULT_OPTIONS.targetSec),
     voiceSource: pick(VOICE_SOURCES, o.voiceSource, DEFAULT_OPTIONS.voiceSource),

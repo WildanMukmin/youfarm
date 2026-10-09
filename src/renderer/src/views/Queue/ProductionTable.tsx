@@ -2,7 +2,7 @@ import { CircleStop, ExternalLink, FolderOpen, RotateCcw, Trash } from 'lucide-r
 import { MODE_INFO } from '@shared/contracts/modes'
 import type { ProductionJob, ProductionStatus } from '@shared/production'
 import { formatDateTime } from '@/lib/format'
-import IconButton from '@/ui/IconButton'
+import IconButton, { IconGap } from '@/ui/IconButton'
 import StatusChip from '@/ui/StatusChip'
 
 type Tone = 'active' | 'done' | 'warn' | 'error' | 'idle'
@@ -130,11 +130,34 @@ export default function ProductionTable({ density, rows, channelNames, onCancel,
               {showUpdated && <td className={`${td} tabular whitespace-nowrap font-mono text-xs text-ink-muted`}>{formatDateTime(j.updatedAt)}</td>}
               <td className={td}>
                 <div className="flex justify-end gap-1.5">
-                  {(j.status === 'queued' || j.status === 'running') && <IconButton icon={CircleStop} label="Batalkan" confirm={j.status === 'running' ? 'Batal?' : undefined} onClick={() => onCancel(j.id)} />}
-                  {(j.status === 'failed' || j.status === 'cancelled') && <IconButton icon={RotateCcw} tone="primary" label="Coba lagi" onClick={() => onRetry(j.id)} />}
-                  {j.status === 'done' && <IconButton icon={ExternalLink} label="Buka video" onClick={() => onOpen(j.id, 'file')} />}
-                  {j.status === 'done' && <IconButton icon={FolderOpen} label="Tampilkan di folder" onClick={() => onOpen(j.id, 'folder')} />}
-                  {j.status !== 'running' && <IconButton icon={Trash} label={j.status === 'done' ? 'Hapus dari daftar (berkas video tetap ada)' : 'Hapus'} confirm="Hapus?" onClick={() => onRemove(j.id)} />}
+                  {/* Tiga slot tetap supaya ikon sejajar antar baris: aksi utama, folder, hapus. */}
+                  {j.status === 'queued' || j.status === 'running' ? (
+                    <IconButton
+                      icon={CircleStop}
+                      label="Batalkan"
+                      confirm={j.status === 'running' ? { message: 'Batalkan video yang sedang dibuat? Kemajuannya hilang.', action: 'Batalkan' } : undefined}
+                      onClick={() => onCancel(j.id)}
+                    />
+                  ) : j.status === 'done' ? (
+                    <IconButton icon={ExternalLink} label="Buka video" onClick={() => onOpen(j.id, 'file')} />
+                  ) : (
+                    <IconButton icon={RotateCcw} tone="primary" label="Coba lagi" onClick={() => onRetry(j.id)} />
+                  )}
+                  {j.status === 'done' ? <IconButton icon={FolderOpen} label="Tampilkan di folder" onClick={() => onOpen(j.id, 'folder')} /> : <IconGap />}
+                  {j.status === 'running' ? (
+                    <IconGap />
+                  ) : (
+                    <IconButton
+                      icon={Trash}
+                      label={j.status === 'done' ? 'Hapus video dan berkasnya' : 'Hapus dari daftar'}
+                      confirm={
+                        j.status === 'done'
+                          ? { message: `Hapus video ini beserta berkasnya (mp4, thumbnail, caption) dari komputer?${j.uploadId ? ' Upload yang masih menunggu ikut dibatalkan.' : ''} Tidak bisa dibatalkan.`, action: 'Hapus' }
+                          : { message: 'Hapus dari antrean produksi?', action: 'Hapus' }
+                      }
+                      onClick={() => onRemove(j.id)}
+                    />
+                  )}
                 </div>
               </td>
             </tr>

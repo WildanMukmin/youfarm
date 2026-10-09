@@ -1,11 +1,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { copyFile } from 'node:fs/promises'
+import { copyFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runFaktaUnik, searchQueries, wrapForThumbnail, type PipelineDeps, type Progress } from '../../src/main/modes/fakta-unik/pipeline.ts'
 import { createFfmpeg } from '../../src/main/platform/ffmpeg.ts'
+import { createFootageLibrary } from '../../src/main/platform/footage-library.ts'
+import { MIGRATIONS } from '../../src/main/platform/migrations.ts'
+import { openSqlite } from '../../src/main/platform/sqlite.ts'
 import { createPiper, pickVoice } from '../../src/main/platform/voice/piper.ts'
 import { StockError, type StockClient, type StockVideo } from '../../src/main/platform/ai/stock.ts'
 
@@ -139,6 +142,104 @@ test('pipeline: JSON AI rusak diulang sekali; gagal dua kali memberi error jelas
 
   const b = await setup({ llm: async () => ({ title: 'x', sentences: [] }) })
   await assert.rejects(runFaktaUnik({ topic: 'fakta laut' }, b.deps), /terlalu pendek/)
+})
+
+test('pipeline: sumber suara satu-permintaan (speakAll) menggantikan suara per kalimat dan peringatannya ikut', { skip }, async () => {
+  let single = 0
+  let batches = 0
+  const a = await setup()
+  a.deps.speak = async () => void single++
+  a.deps.speakAll = async ({ texts, outs, options }) => {
+    if (options.voiceSource !== 'gemini-tts') return null
+    batches++
+    assert.equal(texts.length, outs.length)
+    for (let i = 0; i < outs.length; i++) await a.deps.ffmpeg.run(['-f', 'lavfi', '-i', `sine=frequency=300:duration=${Math.max(1, texts[i].length / 14)}`, outs[i]])
+    return { warnings: ['batas diperkirakan'] }
+  }
+  const r = await runFaktaUnik({ topic: 'fakta laut', voiceSource: 'gemini-tts' }, a.deps)
+  assert.equal(batches, 1)
+  assert.equal(single, 0)
+  assert.ok(r.warnings.includes('batas diperkirakan'))
+  assert.ok(existsSync(r.video.filePath))
+
+  // Sumber lain: speakAll mengembalikan null, jadi tiap kalimat diucapkan sendiri.
+  const b = await setup()
+  b.deps.speak = a.deps.speak
+  let perSentence = 0
+  b.deps.speak = async ({ text, out }) => {
+    perSentence++
+    await b.deps.ffmpeg.run(['-f', 'lavfi', '-i', `sine=frequency=300:duration=${Math.max(1, text.length / 14)}`, out])
+  }
+  b.deps.speakAll = async () => null
+  await runFaktaUnik({ topic: 'fakta laut', voiceSource: 'piper' }, b.deps)
+  assert.equal(perSentence, 4)
+})
+
+async function withLibrary(seed: boolean) {
+  const t = await setup()
+  const db = await openSqlite(join(t.dir, 'lib.sqlite'), MIGRATIONS)
+  const lib = createFootageLibrary({ db, dirFor: (p) => join(t.dir, 'lib', p) })
+  if (seed) {
+    // Tiga klip cocok untuk tiap frasa pencarian naskah, supaya pustaka cukup untuk dipilih.
+    let id = 100
+    for (const phrase of ['deep ocean', 'underwater pressure', 'bioluminescence', 'research vessel']) {
+      for (let k = 0; k < 3; k++, id++) {
+        const dest = join(t.dir, 'lib', 'pixabay', `pixabay-${id}.mp4`)
+        await mkdir(join(t.dir, 'lib', 'pixabay'), { recursive: true })
+        await copyFile(join(t.dir, 'src0.mp4'), dest)
+        await lib.use('pixabay', { id, duration: 2, width: 540, height: 960 }, dest, phrase, 0)
+      }
+    }
+  }
+  t.deps.library = lib
+  t.deps.refreshRate = 0
+  t.deps.random = () => 0
+  return { ...t, lib, db }
+}
+
+test('pipeline + pustaka: pustaka kosong memakai penyedia dan mencatat klipnya di folder pustaka', { skip }, async () => {
+  const t = await withLibrary(false)
+  const r = await runFaktaUnik({ topic: 'fakta laut' }, t.deps)
+  assert.equal(t.searches.length, 4)
+  assert.equal(t.lib.stats().count, 4)
+  assert.deepEqual(readdirSync(join(t.dir, 'lib', 'pixabay')).filter((f) => f.endsWith('.mp4')).length, 4)
+  assert.ok(existsSync(r.video.filePath))
+  t.db.close()
+})
+
+test('pipeline + pustaka: klip cocok di pustaka dipakai tanpa memanggil penyedia sama sekali', { skip }, async () => {
+  const t = await withLibrary(true)
+  const r = await runFaktaUnik({ topic: 'fakta laut' }, t.deps)
+  assert.equal(t.searches.length, 0)
+  assert.ok(existsSync(r.video.filePath))
+  assert.deepEqual(r.warnings.filter((w) => /pustaka|memakai ulang/.test(w)), [])
+  // Empat klip dipakai (satu per kalimat), dan sekarang dihindari untuk video berikutnya.
+  assert.equal(t.lib.recentIds('pixabay', t.lib.beginVideo()).size, 4)
+  t.db.close()
+})
+
+test('pipeline + pustaka: penyedia gagal (kuota) memakai pustaka dan memberi peringatan; tanpa pustaka tetap gagal', { skip }, async () => {
+  const t = await withLibrary(true)
+  t.deps.refreshRate = 1
+  t.deps.stock = () => ({ search: async () => { throw new StockError('quota', 'Batas permintaan Pixabay tercapai.') }, download: t.client.download })
+  const r = await runFaktaUnik({ topic: 'fakta laut' }, t.deps)
+  assert.ok(existsSync(r.video.filePath))
+  assert.equal(r.warnings.filter((w) => /pustaka lokal karena Pixabay/.test(w)).length, 4)
+  t.db.close()
+
+  const empty = await withLibrary(false)
+  empty.deps.stock = () => ({ search: async () => { throw new StockError('quota', 'Batas permintaan Pixabay tercapai.') }, download: empty.client.download })
+  await assert.rejects(runFaktaUnik({ topic: 'fakta laut' }, empty.deps), /Batas permintaan Pixabay/)
+  empty.db.close()
+})
+
+test('pipeline + pustaka: batas ukuran membuang klip lama setelah video jadi, klip video ini aman', { skip }, async () => {
+  const t = await withLibrary(true)
+  t.deps.libraryMaxBytes = 1
+  await runFaktaUnik({ topic: 'fakta laut' }, t.deps)
+  // Hanya klip yang dipakai video ini yang tersisa.
+  assert.equal(t.lib.stats().count, 4)
+  t.db.close()
 })
 
 test('pipeline: tanpa footage sama sekali gagal jelas; sebagian kosong memakai ulang footage', { skip }, async () => {

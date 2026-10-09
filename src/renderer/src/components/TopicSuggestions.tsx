@@ -10,6 +10,9 @@ import Field from '@/ui/Field'
 interface Props {
   mode: string
   language: string
+  /** Penulis teks yang dipilih di form mode. */
+  textProvider: string
+  textModel: string
   /** Topik yang sudah ada di kolom topik (untuk menandai saran yang sudah ditambahkan). */
   current: string[]
   /** Alasan tombol tidak bisa dipakai (key atau model penulis teks belum diisi). */
@@ -17,8 +20,8 @@ interface Props {
   onAdd: (topics: string[]) => void
 }
 
-/** Minta AI (Gemini atau Groq sesuai Settings) menyarankan topik, lalu tambahkan ke kolom topik. */
-export default function TopicSuggestions({ mode, language, current, disabledReason, onAdd }: Props) {
+/** Minta AI (Gemini atau Groq sesuai pilihan di form mode) menyarankan topik, lalu tambahkan ke kolom topik. */
+export default function TopicSuggestions({ mode, language, textProvider, textModel, current, disabledReason, onAdd }: Props) {
   const [items, setItems] = useStickyState<TopicSuggestion[]>(`${mode}:suggestions`, [])
   const [seed, setSeed] = useStickyState(`${mode}:suggest-niche`, '')
   const [loading, setLoading] = useState(false)
@@ -29,7 +32,7 @@ export default function TopicSuggestions({ mode, language, current, disabledReas
   const load = async (): Promise<void> => {
     setLoading(true)
     try {
-      setItems(await window.youfarm.modes.suggestTopics({ mode, seed: seed.trim(), language }))
+      setItems(await window.youfarm.modes.suggestTopics({ mode, seed: seed.trim(), language, textProvider, textModel }))
     } catch (e) {
       toast.error(errMsg(e, 'Gagal meminta saran topik.'))
     } finally {
@@ -53,7 +56,7 @@ export default function TopicSuggestions({ mode, language, current, disabledReas
             }}
           />
         </div>
-        <Button variant="ghost" className="shrink-0" disabled={blocked} onClick={() => void load()}>
+        <Button variant="ghost" className="h-[42px] shrink-0" disabled={blocked} onClick={() => void load()}>
           {loading ? 'Meminta…' : items.length ? 'Lagi' : 'Sarankan'}
         </Button>
       </div>

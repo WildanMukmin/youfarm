@@ -11,6 +11,7 @@ import { SEARCH_CACHE_MS, createPixabayClient, normalizeHits, pickRendition } fr
 import { StockError, pickVideo, type StockVideo } from '../../src/main/platform/ai/stock.ts'
 import { GroqError, createGroqClient } from '../../src/main/platform/ai/groq-client.ts'
 import { DeepgramError, createDeepgramTts } from '../../src/main/platform/voice/deepgram.ts'
+import { ElevenLabsError, createElevenLabsTts } from '../../src/main/platform/voice/elevenlabs.ts'
 import { DEEPGRAM_VOICES, languageInfo, speechUnits, splitWords, voiceSourceSupports } from '../../src/shared/languages.ts'
 
 async function serve(handler: (req: import('node:http').IncomingMessage, body: string, res: import('node:http').ServerResponse) => void): Promise<{ base: string; server: Server; close: () => void }> {
@@ -75,12 +76,14 @@ test('gemini: speak mengembalikan WAV dari PCM dengan sample rate dari respons',
 test('gemini: klasifikasi error, retry 503, dan tanpa key', async () => {
   let n = 0
   let mode = 503
+  let quota: object = {}
   const s = await serve((_req, _b, res) => {
     n++
     if (mode === 503 && n < 3) return send(res, 503, { error: { message: 'overloaded' } })
     if (mode === 503) return send(res, 200, { candidates: [{ content: { parts: [{ text: '{"ok":true}' }] } }] })
     if (mode === 400) return send(res, 400, { error: { message: 'API key not valid. Please pass a valid API key.' } })
-    if (mode === 429) return send(res, 429, { error: { message: 'quota' } })
+    if (mode === 429 || (mode === 1 && n === 1)) return send(res, 429, { error: { message: 'quota', ...quota } })
+    if (mode === 1) return send(res, 200, { candidates: [{ content: { parts: [{ text: '{"ok":true}' }] } }] })
     send(res, 200, { promptFeedback: { blockReason: 'SAFETY' } })
   })
   try {
@@ -91,9 +94,23 @@ test('gemini: klasifikasi error, retry 503, dan tanpa key', async () => {
     mode = 400
     await assert.rejects(c.completeJson({ model: 'm', system: '', user: '' }), (e: unknown) => e instanceof GeminiError && e.kind === 'key')
     mode = 429
-    await assert.rejects(c.completeJson({ model: 'm', system: '', user: '' }), (e: unknown) => e instanceof GeminiError && e.kind === 'quota')
+    await assert.rejects(c.completeJson({ model: 'm', system: '', user: '' }), (e: unknown) => e instanceof GeminiError && e.kind === 'retry' && /terlalu cepat/.test(e.message))
     mode = 0
     await assert.rejects(c.completeJson({ model: 'm', system: '', user: '' }), (e: unknown) => e instanceof GeminiError && e.kind === 'blocked')
+
+    // Batas per hari: berhenti dengan pesan yang menyebut modelnya. Batas per menit: tunggu sesuai Google lalu coba lagi.
+    mode = 429
+    quota = { details: [{ '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }] }
+    await assert.rejects(c.completeJson({ model: 'gemini-x-tts', system: '', user: '' }), (e: unknown) => e instanceof GeminiError && e.kind === 'quota' && /harian.*gemini-x-tts/.test(e.message))
+    quota = { details: [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '0.01s' }] }
+    mode = 1
+    n = 0
+    assert.deepEqual(await c.completeJson({ model: 'm', system: '', user: '' }), { ok: true })
+    assert.equal(n, 2, 'batas per menit dicoba ulang sekali lalu berhasil')
+    quota = { details: [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '3600s' }] }
+    mode = 429
+    await assert.rejects(c.completeJson({ model: 'm', system: '', user: '' }), (e: unknown) => e instanceof GeminiError && e.kind === 'quota' && /60 menit/.test(e.message))
+    mode = 0
     await assert.rejects(createGeminiClient({ apiKey: () => undefined, base: s.base }).completeJson({ model: 'm', system: '', user: '' }), /belum diisi/)
   } finally {
     s.close()
@@ -126,6 +143,12 @@ test('stock: pickVideo menghindari yang sudah dipakai dan memilih yang vertikal 
   assert.equal(pickVideo(c, { neededSec: 6, used: new Set([3, 1]) })?.id, 4)
   assert.equal(pickVideo(c, { neededSec: 6, used: new Set([3, 1, 4]) })?.id, 2)
   assert.equal(pickVideo(c, { neededSec: 6, used: new Set([1, 2, 3, 4]) }), null)
+
+  // Klip yang baru dipakai video lain dihindari bila ada pilihan lain; bila tidak ada, tetap boleh.
+  assert.equal(pickVideo(c, { neededSec: 6, used: new Set(), avoid: new Set([3]) })?.id, 1)
+  assert.equal(pickVideo(c, { neededSec: 6, used: new Set(), avoid: new Set([1, 2, 3, 4]) })?.id, 3)
+  // Dengan rng, pilihan acak di antara tiga terbaik (3, 1, 4); tanpa rng selalu yang teratas.
+  assert.deepEqual([0, 0.4, 0.9].map((r) => pickVideo(c, { neededSec: 6, used: new Set(), rng: () => r })?.id), [3, 1, 4])
 })
 
 test('pexels: search memakai header Authorization, error terklasifikasi, unduhan dicache', async () => {
@@ -321,6 +344,48 @@ test('deepgram: /speak dengan model dan format WAV, error terklasifikasi', async
   }
 })
 
+test('elevenlabs: daftar suara, suara pertama sebagai bawaan, WAV 24 kHz, error terklasifikasi', async () => {
+  let status = 200
+  let detail: unknown = { status: 'x', message: 'ditolak' }
+  const seen: { path: string; body: unknown }[] = []
+  const s = await serve((req, body, res) => {
+    const u = new URL(req.url!, 'http://x')
+    if (req.headers['xi-api-key'] !== 'ELKEY') return send(res, 401, { detail: { status: 'invalid_api_key', message: 'Invalid API key' } })
+    if (u.pathname === '/voices') return send(res, 200, { voices: [{ voice_id: 'voiceAAAAAA1', name: 'Rachel', category: 'premade' }, { voice_id: 'bad id!', name: 'X' }, { voice_id: 'voiceBBBBBB2', name: 'Saya', category: 'cloned' }] })
+    if (status !== 200) return send(res, status, { detail })
+    seen.push({ path: u.pathname + u.search, body: JSON.parse(body) })
+    return void res.writeHead(200, { 'Content-Type': 'audio/pcm' }).end(Buffer.alloc(4800))
+  })
+  try {
+    const el = createElevenLabsTts({ apiKey: () => 'ELKEY', base: s.base, retryDelayMs: 5 })
+    assert.deepEqual(await el.voices(), [{ id: 'voiceAAAAAA1', label: 'Rachel' }, { id: 'voiceBBBBBB2', label: 'Saya · cloned' }])
+
+    const wav = await el.speak({ text: '  Halo   dunia. ' })
+    assert.equal(wav.toString('ascii', 0, 4), 'RIFF')
+    assert.equal(wav.readUInt32LE(24), 24000)
+    assert.equal(wav.length, 44 + 4800)
+    assert.equal(seen[0].path, '/text-to-speech/voiceAAAAAA1?output_format=pcm_24000')
+    assert.deepEqual(seen[0].body, { text: 'Halo dunia.', model_id: 'eleven_flash_v2_5' })
+    await el.speak({ voiceId: 'voiceBBBBBB2', text: 'x' })
+    assert.ok(seen[1].path.startsWith('/text-to-speech/voiceBBBBBB2?'))
+
+    await assert.rejects(el.speak({ voiceId: '../etc', text: 'x' }), /tidak dikenal/)
+    await assert.rejects(createElevenLabsTts({ apiKey: () => 'SALAH', base: s.base }).voices(), (e: unknown) => e instanceof ElevenLabsError && e.kind === 'key')
+    await assert.rejects(createElevenLabsTts({ apiKey: () => undefined, base: s.base }).voices(), /belum diisi/)
+    status = 401
+    detail = { status: 'quota_exceeded', message: 'habis' }
+    await assert.rejects(el.speak({ voiceId: 'voiceAAAAAA1', text: 'x' }), (e: unknown) => e instanceof ElevenLabsError && e.kind === 'quota')
+    status = 402
+    detail = { status: 'paid_plan_required', message: 'x' }
+    await assert.rejects(el.speak({ voiceId: 'voiceAAAAAA1', text: 'x' }), /butuh paket/)
+    status = 422
+    detail = [{ msg: 'tidak valid' }]
+    await assert.rejects(el.speak({ voiceId: 'voiceAAAAAA1', text: 'x' }), (e: unknown) => e instanceof ElevenLabsError && e.kind === 'bad')
+  } finally {
+    s.close()
+  }
+})
+
 test('languages: satuan ucap, pemenggal kata, dan dukungan suara per bahasa', () => {
   assert.equal(speechUnits('satu dua  tiga', 'id'), 3)
   assert.equal(speechUnits('深海には、秘密。', 'ja'), 6)
@@ -329,6 +394,7 @@ test('languages: satuan ucap, pemenggal kata, dan dukungan suara per bahasa', ()
   assert.equal(ja.join(''), '深海には、秘密がある。')
   assert.ok(ja.every((w) => !/^[、。]/.test(w)), 'tanda baca menempel ke kata sebelumnya')
   assert.ok(voiceSourceSupports('gemini-tts', 'th'))
+  assert.ok(voiceSourceSupports('elevenlabs', 'id') && !voiceSourceSupports('elevenlabs', 'jv') && !voiceSourceSupports('elevenlabs', 'th'))
   assert.ok(voiceSourceSupports('deepgram', 'en') && !voiceSourceSupports('deepgram', 'id'))
   assert.ok(voiceSourceSupports('piper', 'id', ['id', 'en']) && !voiceSourceSupports('piper', 'ja', ['id', 'en']))
   assert.equal(languageInfo('zz').code, 'id')

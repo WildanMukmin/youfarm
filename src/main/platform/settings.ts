@@ -1,6 +1,5 @@
-import { DEFAULT_SETTINGS, mergeSettings, sanitizeProviders, type Settings } from '@shared/settings'
+import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '@shared/settings'
 import { getKv, setKv } from './db'
-import { secretStatus } from './secrets'
 
 const KEY = 'settings'
 
@@ -14,11 +13,11 @@ export function getSettings(): Settings {
       stored = null
     }
   }
-  return sanitizeProviders(mergeSettings(DEFAULT_SETTINGS, stored), secretStatus())
+  return mergeSettings(DEFAULT_SETTINGS, stored)
 }
 
 export function updateSettings(patch: unknown): Settings {
-  const next = sanitizeProviders(mergeSettings(getSettings(), patch), secretStatus())
+  const next = mergeSettings(getSettings(), patch)
   setKv(KEY, JSON.stringify(next))
   return next
 }
