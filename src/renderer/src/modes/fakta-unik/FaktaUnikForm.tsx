@@ -21,13 +21,15 @@ import Select from '@/ui/Select'
 import TextArea from '@/ui/TextArea'
 import AutoPublish, { DEFAULT_AUTO_PUBLISH, toPlan, type AutoPublishState } from './AutoPublish'
 
-type FormTab = 'konten' | 'suara' | 'caption'
+export type FormTab = 'konten' | 'suara' | 'caption'
 
 interface Props {
   opts: FaktaUnikOptions
   setOpts: Dispatch<SetStateAction<FaktaUnikOptions>>
-  running: boolean
-  onSubmit: (options: FaktaUnikOptions) => void
+  tab: FormTab
+  onTab: (tab: FormTab) => void
+  /** Dipanggil setelah video masuk antrean produksi, dengan id job-nya. */
+  onQueued: (ids: number[]) => void
   onOpenSettings: () => void
   onOpenQueue: () => void
   onOpenAccounts: () => void
@@ -46,9 +48,8 @@ function textWriterIssue(settings: Settings, status: SecretStatus): string | nul
 }
 
 /** Panel input mode Fakta Unik: tab Konten, Suara, dan Caption. Isian bertahan saat pindah menu. */
-export default function FaktaUnikForm({ opts, setOpts, running, onSubmit, onOpenSettings, onOpenQueue, onOpenAccounts }: Props) {
+export default function FaktaUnikForm({ opts, setOpts, tab, onTab, onQueued, onOpenSettings, onOpenQueue, onOpenAccounts }: Props) {
   const { settings, status } = useSettings()
-  const [tab, setTab] = useStickyState<FormTab>('fakta-unik:tab', 'konten')
   const [voices, setVoices] = useState<VoiceCatalog | null>(null)
   const [publish, setPublish] = useStickyState<AutoPublishState>('fakta-unik:auto-publish', DEFAULT_AUTO_PUBLISH)
   const [queueing, setQueueing] = useState(false)
@@ -90,7 +91,7 @@ export default function FaktaUnikForm({ opts, setOpts, running, onSubmit, onOpen
   const short = topics.filter((t) => t.length < 3).length
   const valid = topics.length > 0 && short === 0 && topics.length <= MAX_BATCH
   const canRun = loaded && issues.length === 0 && valid
-  const batch = topics.length > 1
+  const label = topics.length > 1 ? `Buat ${topics.length} video` : 'Buat video'
 
   const changeLanguage = (code: LanguageCode): void =>
     setOpts((o) => ({
@@ -108,14 +109,15 @@ export default function FaktaUnikForm({ opts, setOpts, running, onSubmit, onOpen
       return { ...o, topic: [...lines, ...list.filter((t) => !have.has(t.toLowerCase()))].join('\n') }
     })
 
-  /** Masukkan semua topik ke antrean produksi dengan opsi yang sedang dipilih. */
+  /** Setiap video, satu atau banyak, masuk antrean produksi dengan salinan pengaturan saat ini. */
   const enqueue = async (): Promise<void> => {
     setQueueing(true)
     try {
       const ids = await window.youfarm.production.enqueue({ mode: 'fakta-unik', options: topics.map((topic) => ({ ...opts, topic })), publish: toPlan(publish) })
       refreshQueues()
-      toast.success(`${ids.length} video masuk antrean produksi.`, { action: { label: 'Lihat', onClick: onOpenQueue } })
+      toast.success(ids.length === 1 ? 'Video masuk antrean produksi.' : `${ids.length} video masuk antrean produksi.`, { action: { label: 'Lihat antrean', onClick: onOpenQueue } })
       setOpts((o) => ({ ...o, topic: '' }))
+      onQueued(ids)
     } catch (e) {
       toast.error(errMsg(e))
     } finally {
@@ -134,7 +136,7 @@ export default function FaktaUnikForm({ opts, setOpts, running, onSubmit, onOpen
             { id: 'caption', label: 'Caption' }
           ]}
           active={tab}
-          onChange={setTab}
+          onChange={onTab}
         />
       }
       footer={
@@ -151,20 +153,9 @@ export default function FaktaUnikForm({ opts, setOpts, running, onSubmit, onOpen
               </button>
             </Notice>
           )}
-          {batch ? (
-            <Button className="w-full" disabled={!canRun || queueing} onClick={() => void enqueue()}>
-              {queueing ? 'Memasukkan…' : `Antrekan ${topics.length} video`}
-            </Button>
-          ) : (
-            <div className="flex gap-2">
-              <Button className="flex-1" disabled={!canRun || running} onClick={() => onSubmit({ ...opts, topic: topics[0] ?? '' })}>
-                {running ? 'Sedang membuat…' : 'Buat video'}
-              </Button>
-              <Button variant="ghost" disabled={!canRun || queueing} onClick={() => void enqueue()} title="Buat di latar lewat antrean produksi">
-                Antrekan
-              </Button>
-            </div>
-          )}
+          <Button className="w-full" disabled={!canRun || queueing} onClick={() => void enqueue()}>
+            {queueing ? 'Memasukkan…' : label}
+          </Button>
         </div>
       }
     >
@@ -172,7 +163,7 @@ export default function FaktaUnikForm({ opts, setOpts, running, onSubmit, onOpen
         <div className="grid gap-4">
           <TextArea
             label="Topik"
-            aside={batch ? `${topics.length} video` : undefined}
+            aside={topics.length > 1 ? `${topics.length} video` : undefined}
             value={opts.topic}
             onChange={(e) => set('topic', e.target.value)}
             placeholder={'Contoh: fakta aneh laut dalam\nSatu topik per baris untuk membuat banyak video sekaligus.'}
@@ -183,8 +174,8 @@ export default function FaktaUnikForm({ opts, setOpts, running, onSubmit, onOpen
                 ? `Maksimal ${MAX_BATCH} topik sekali antre.`
                 : short
                   ? 'Tiap topik minimal 3 karakter.'
-                  : batch
-                    ? 'Semua topik memakai pengaturan yang sama dan dibuat di latar lewat antrean produksi.'
+                  : topics.length > 1
+                    ? 'Semua topik memakai pengaturan yang sama dan dibuat satu per satu.'
                     : undefined
             }
           />

@@ -1,8 +1,8 @@
-import type { ModeRunResult } from '@shared/ipc-channels'
+import type { ProductionDetail } from '@shared/production'
 import Notice from '@/ui/Notice'
 
 /** Naskah, deskripsi, dan tag hasil job. Berlaku untuk semua mode yang punya naskah. */
-export default function ScriptPanel({ result }: { result: ModeRunResult | null }) {
+export default function ScriptPanel({ result }: { result: ProductionDetail | null }) {
   if (!result) return <p className="text-sm text-ink-muted">Naskah muncul di sini setelah video selesai dibuat.</p>
   return (
     <div className="grid gap-5">
@@ -15,17 +15,21 @@ export default function ScriptPanel({ result }: { result: ModeRunResult | null }
           {w}
         </Notice>
       ))}
-      <div>
-        <div className="mb-2 text-xs text-ink-muted">Naskah ({result.sentences.length} kalimat)</div>
-        <ol className="grid gap-2">
-          {result.sentences.map((s, i) => (
-            <li key={i} className="grid grid-cols-[22px_1fr] gap-2 text-sm leading-relaxed">
-              <span className="font-mono text-xs text-ink-muted">{String(i + 1).padStart(2, '0')}</span>
-              <span>{s}</span>
-            </li>
-          ))}
-        </ol>
-      </div>
+      {result.sentences.length > 0 ? (
+        <div>
+          <div className="mb-2 text-xs text-ink-muted">Naskah ({result.sentences.length} kalimat)</div>
+          <ol className="grid gap-2">
+            {result.sentences.map((s, i) => (
+              <li key={i} className="grid grid-cols-[22px_1fr] gap-2 text-sm leading-relaxed">
+                <span className="font-mono text-xs text-ink-muted">{String(i + 1).padStart(2, '0')}</span>
+                <span>{s}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : (
+        <p className="text-sm text-ink-muted">{result.video.script || 'Naskah video ini tidak tersimpan.'}</p>
+      )}
       {result.description && (
         <div>
           <div className="mb-1 text-xs text-ink-muted">Deskripsi</div>

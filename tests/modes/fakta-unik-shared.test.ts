@@ -11,8 +11,6 @@ import {
   validateOptions
 } from '../../src/shared/modes/fakta-unik.ts'
 import { CAPTION_TEMPLATES, DEFAULT_CAPTION } from '../../src/shared/captions.ts'
-import { createJobRegistry, isJobId } from '../../src/main/modes/jobs.ts'
-import type { RenderedVideo } from '../../src/shared/contracts/modes.ts'
 
 test('validateOptions: topik wajib, nilai tak valid kembali ke bawaan, avoid dirapikan', () => {
   assert.throws(() => validateOptions({ topic: 'ab' }), /minimal 3/)
@@ -108,27 +106,14 @@ test('saran topik: prompt memakai niche bila ada, dan hasil AI dirapikan', () =>
   assert.throws(() => parseTopics({}), /daftar topik/)
 })
 
-test('jobs: pembatalan per job, hasil dibatasi, id divalidasi', () => {
-  const jobs = createJobRegistry()
-  const a = jobs.start('job-aaaaaaaa')
-  const b = jobs.start('job-bbbbbbbb')
-  assert.throws(() => jobs.start('job-aaaaaaaa'), /sudah berjalan/)
-  assert.equal(jobs.cancel('job-aaaaaaaa'), true)
-  assert.equal(a.aborted, true)
-  assert.equal(b.aborted, false, 'membatalkan satu job tidak menghentikan job lain')
-  assert.equal(jobs.cancel('tidak-ada-xx'), false)
-  jobs.cancelAll()
-  assert.equal(b.aborted, true)
-  jobs.finish('job-aaaaaaaa')
-  assert.equal(jobs.isRunning('job-aaaaaaaa'), false)
-
-  const video = { filePath: 'x.mp4' } as RenderedVideo
-  for (let i = 0; i < 60; i++) jobs.save({ jobId: `res-${String(i).padStart(8, '0')}`, video, description: '', tags: [] })
-  assert.equal(jobs.get('res-00000000'), undefined, 'hasil terlama dibuang')
-  assert.ok(jobs.get('res-00000059'))
-
-  assert.equal(isJobId('3f2a-4b5c-aaaa'), true)
-  assert.equal(isJobId('../../etc'), false)
-  assert.equal(isJobId('pendek'), false)
-  assert.equal(isJobId(5), false)
+test('scriptLanguageMismatch: mendeteksi naskah Inggris saat dipilih Indonesia dan sebaliknya', async () => {
+  const { scriptLanguageMismatch } = await import('../../src/shared/modes/fakta-unik.ts')
+  const mk = (...t: string[]) => ({ title: 't', description: '', tags: [], sentences: t.map((text) => ({ text, keywords: ['a'] })) })
+  const en = mk("Neptune's rings are thin, faint, and icy dust.", 'They formed from the debris of shattered moons.', 'Gravity is what keeps the rings in place.')
+  const id = mk('Cincin Neptunus tipis dan terbuat dari debu es.', 'Cincin itu terbentuk dari sisa bulan yang hancur.', 'Gravitasi yang menjaga cincin tetap di tempatnya.')
+  assert.equal(scriptLanguageMismatch(en, 'id'), true)
+  assert.equal(scriptLanguageMismatch(id, 'id'), false)
+  assert.equal(scriptLanguageMismatch(id, 'en'), true)
+  assert.equal(scriptLanguageMismatch(en, 'en'), false)
+  assert.equal(scriptLanguageMismatch(en, 'ja'), false, 'bahasa lain tidak diperiksa')
 })

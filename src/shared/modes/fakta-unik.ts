@@ -103,6 +103,8 @@ export function buildScriptPrompt(o: FaktaUnikOptions): { system: string; user: 
     'Untuk tiap kalimat beri 2 sampai 3 kata kunci visual dalam bahasa Inggris untuk mencari footage stock: benda atau pemandangan yang konkret dan bisa difilmkan, bukan konsep abstrak.',
     avoid,
     '',
+    `PENTING: title, text, description, dan tags WAJIB ditulis dalam ${lang.promptName}, apa pun bahasa topiknya. Hanya "keywords" yang berbahasa Inggris.`,
+    '',
     'Skema JSON:',
     '{"title": string (maks 70 karakter, menarik, tanpa clickbait menyesatkan),',
     ' "sentences": [{"text": string, "keywords": [string]}],',
@@ -186,6 +188,30 @@ export function parseScript(json: unknown): FaktaScript {
 
   const tags = (Array.isArray(j.tags) ? j.tags : []).map(clean).filter(Boolean).slice(0, 12)
   return { title, sentences, description: clean(j.description), tags }
+}
+
+const STOPWORDS: Record<string, Set<string>> = {
+  id: new Set('yang dan di ke dari untuk dengan adalah ini itu pada tidak bisa karena atau sebuah kamu akan juga lebih sangat para saat sudah masih'.split(' ')),
+  en: new Set('the and of to in is that are for with it as on by this be was can their from have not but his which more'.split(' '))
+}
+
+/**
+ * Bahasa Indonesia dan Inggris sering tertukar karena kata kunci footage diminta berbahasa Inggris. Hitung kata fungsi
+ * kedua bahasa; naskah dianggap salah bahasa bila bahasa lain jelas lebih banyak. Bahasa lain tidak diperiksa.
+ */
+export function scriptLanguageMismatch(script: FaktaScript, language: string): boolean {
+  const want = STOPWORDS[language]
+  if (!want) return false
+  const other = STOPWORDS[language === 'id' ? 'en' : 'id']
+  let a = 0
+  let b = 0
+  for (const s of script.sentences) {
+    for (const w of s.text.toLowerCase().match(/[a-zà-ÿ']+/g) ?? []) {
+      if (want.has(w)) a++
+      else if (other.has(w)) b++
+    }
+  }
+  return b >= 3 && b > a * 1.5
 }
 
 /** Naskah dianggap pas bila panjangnya dalam ±40% target. Hanya peringatan, bukan penolakan. */

@@ -24,6 +24,7 @@ const result = (title: string): ProductionResult => ({
   },
   description: '',
   tags: [],
+  sentences: ['Kalimat satu.', 'Kalimat dua.'],
   warnings: []
 })
 
@@ -185,4 +186,24 @@ test('hapus: tidak bisa menghapus yang sedang berjalan', async () => {
   s.q.remove(a)
   s.q.remove(b)
   assert.deepEqual(s.q.snapshot().items.map((i) => i.id), [b])
+})
+
+test('detail untuk renderer: tanpa path berkas; attachUpload mencatat video yang dikirim dari panel Publikasi', async () => {
+  const { q, job } = await setup(async (o) => ({ ...result(`Judul ${(o as { topic: string }).topic}`), warnings: ['Naskah agak pendek.'] }))
+  const [id] = q.enqueue({ mode: 'fakta-unik', options: [{ topic: 'fakta laut' }], publish: null })
+  assert.equal(q.detail(id), null, 'belum jadi')
+  await q.processNext()
+  const d = q.detail(id)!
+  assert.deepEqual(d.sentences, ['Kalimat satu.', 'Kalimat dua.'])
+  assert.deepEqual(d.warnings, ['Naskah agak pendek.'])
+  assert.equal(d.uploadId, null)
+  assert.equal(d.video.hasThumbnail, false)
+  assert.ok(!JSON.stringify(d).includes('.mp4'), 'path berkas tidak ikut')
+  q.attachUpload(id, 42)
+  assert.equal(q.detail(id)!.uploadId, 42)
+  assert.equal(job(id).uploadId, 42)
+  // Hanya job yang sudah jadi yang bisa ditandai.
+  const [other] = q.enqueue({ mode: 'fakta-unik', options: [{ topic: 'fakta darat' }], publish: null })
+  q.attachUpload(other, 7)
+  assert.equal(job(other).uploadId, null)
 })

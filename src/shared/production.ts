@@ -1,5 +1,5 @@
 /** Antrean produksi: membuat video di latar, satu per satu. Tipe dibagi antara main dan renderer. */
-import type { ProductionModeId } from './contracts/modes.ts'
+import type { ProductionModeId, RenderedVideo } from './contracts/modes.ts'
 import type { Privacy } from './youtube/metadata.ts'
 
 /**
@@ -40,6 +40,32 @@ export interface ProductionJob {
   createdAt: string
   updatedAt: string
   finishedAt: string | null
+}
+
+/** Hasil lengkap satu video yang sudah jadi: untuk panel Naskah dan Publikasi. Path berkas tidak pernah dikirim ke renderer. */
+export interface ProductionDetail {
+  id: number
+  video: Omit<RenderedVideo, 'filePath' | 'thumbnailPath' | 'captionPath'> & { hasThumbnail: boolean }
+  description: string
+  tags: string[]
+  /** Kalimat naskah. Kosong untuk video yang dibuat sebelum naskah disimpan. */
+  sentences: string[]
+  warnings: string[]
+  /** ID item antrean upload bila sudah dimasukkan. */
+  uploadId: number | null
+}
+
+export interface ProductionPublishRequest {
+  id: number
+  channelId: string
+  privacy: Privacy
+  /** True: tayang di jam tayang kosong berikutnya milik channel. */
+  schedule: boolean
+}
+
+export interface ProductionPublishResult {
+  queueId: number
+  publishAt: string | null
 }
 
 export interface ProductionSnapshot {

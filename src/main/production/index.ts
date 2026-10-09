@@ -24,7 +24,7 @@ export function getProductionQueue(): ProductionQueue {
           // Judul video yang sudah pernah jadi masuk daftar "avoid", supaya AI tidak mengulang fakta yang sama.
           const avoid = [...new Set([...o.avoid, ...q.recentTitles('fakta-unik')])].slice(0, 50)
           const r = await runWithRealDeps({ ...o, avoid }, onProgress, signal)
-          return { video: r.video, description: r.script.description, tags: r.script.tags, warnings: r.warnings }
+          return { video: r.video, description: r.script.description, tags: r.script.tags, sentences: r.script.sentences.map((s) => s.text), warnings: r.warnings }
         }
       },
       publish: (res, plan) => enqueueRendered(res, plan).queueId

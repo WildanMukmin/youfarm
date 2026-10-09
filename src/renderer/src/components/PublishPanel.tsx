@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import type { ModeRunResult } from '@shared/ipc-channels'
+import type { ProductionDetail } from '@shared/production'
 import type { Privacy } from '@shared/youtube/metadata'
 import type { YoutubeAccountInfo } from '@shared/youtube/accounts'
 import { errMsg } from '@/lib/errors'
 import { formatClock, formatDateTime, formatSlot } from '@/lib/format'
 import { upcomingSlots } from '@/lib/slots'
-import { useQueue } from '@/hooks/useQueue'
+import { refreshQueues, useQueue } from '@/hooks/useQueue'
 import Button from '@/ui/Button'
 import Checkbox from '@/ui/Checkbox'
 import Notice from '@/ui/Notice'
@@ -19,12 +19,12 @@ const PRIVACY: { value: Privacy; label: string }[] = [
 ]
 
 interface Props {
-  result: ModeRunResult
+  result: ProductionDetail
   onOpenQueue: () => void
   onOpenAccounts: () => void
 }
 
-/** Masukkan video hasil ke antrean upload YouTube. Berlaku untuk semua mode produksi. */
+/** Masukkan video yang sudah jadi ke antrean upload YouTube. Berlaku untuk semua mode produksi. */
 export default function PublishPanel({ result, onOpenQueue, onOpenAccounts }: Props) {
   const [accounts, setAccounts] = useState<YoutubeAccountInfo[] | null>(null)
   const { snapshot } = useQueue()
@@ -41,6 +41,17 @@ export default function PublishPanel({ result, onOpenQueue, onOpenAccounts }: Pr
       if (ok.length > 0) setChannelId(ok[0].channel.id)
     })
   }, [])
+
+  if (!queued && result.uploadId) {
+    return (
+      <Notice tone="info" title="Sudah masuk antrean upload">
+        Video ini sudah dikirim ke antrean upload (otomatis, atau dari panel ini sebelumnya).{' '}
+        <button className="text-crimson-hi underline underline-offset-2" onClick={onOpenQueue}>
+          Lihat antrean
+        </button>
+      </Notice>
+    )
+  }
 
   if (queued) {
     return (
@@ -67,8 +78,9 @@ export default function PublishPanel({ result, onOpenQueue, onOpenAccounts }: Pr
   const submit = async () => {
     setBusy(true)
     try {
-      const r = await window.youfarm.modes.enqueue({ jobId: result.jobId, channelId, privacy, schedule })
+      const r = await window.youfarm.production.publish({ id: result.id, channelId, privacy, schedule })
       setQueued({ publishAt: r.publishAt })
+      refreshQueues()
       toast.success('Video dimasukkan ke antrean upload.')
     } catch (e) {
       toast.error(errMsg(e))

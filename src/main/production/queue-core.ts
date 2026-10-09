@@ -2,6 +2,7 @@ import type { Sqlite } from '../platform/sqlite.ts'
 import type { RenderedVideo } from '../../shared/contracts/modes.ts'
 import {
   MAX_BATCH,
+  type ProductionDetail,
   type ProductionEnqueueRequest,
   type ProductionJob,
   type ProductionSnapshot,
@@ -13,6 +14,8 @@ export interface ProductionResult {
   video: RenderedVideo
   description: string
   tags: string[]
+  /** Kalimat naskah, untuk panel Naskah. */
+  sentences: string[]
   warnings: string[]
 }
 
@@ -146,6 +149,29 @@ export function createProductionQueue(deps: ProductionDeps) {
     return r?.result_json ? (JSON.parse(r.result_json) as ProductionResult) : null
   }
 
+  /** Hasil untuk renderer: tanpa path berkas. Video lama belum punya `sentences`. */
+  function detail(id: number): ProductionDetail | null {
+    const r = get(id)
+    const res = r?.result_json ? (JSON.parse(r.result_json) as ProductionResult) : null
+    if (!r || !res) return null
+    const { filePath: _f, thumbnailPath, captionPath: _c, ...video } = res.video
+    return {
+      id,
+      video: { ...video, hasThumbnail: Boolean(thumbnailPath) },
+      description: res.description,
+      tags: res.tags,
+      sentences: res.sentences ?? [],
+      // Kolom warning = peringatan video + (bila ada) kegagalan memasukkan ke antrean upload, digabung spasi.
+      warnings: [...res.warnings, (r.warning ?? '').slice(res.warnings.join(' ').length).trim()].filter(Boolean),
+      uploadId: r.upload_id
+    }
+  }
+
+  /** Catat bahwa video ini sudah dimasukkan ke antrean upload (dari panel Publikasi). */
+  function attachUpload(id: number, uploadId: number): void {
+    db.run("UPDATE production_jobs SET upload_id = ?, updated_at = ? WHERE id = ? AND status = 'done'", [uploadId, iso(), id])
+  }
+
   async function processNext(): Promise<ProductionOutcome> {
     const row = db.get<Row>("SELECT * FROM production_jobs WHERE status = 'queued' ORDER BY id LIMIT 1")
     if (!row) return 'idle'
@@ -230,7 +256,7 @@ export function createProductionQueue(deps: ProductionDeps) {
       .map((r) => r.title)
   }
 
-  return { enqueue, snapshot, cancel, retry, remove, result, processNext, recoverInterrupted, start, stop, recentTitles, isRunning: () => running }
+  return { enqueue, snapshot, cancel, retry, remove, result, detail, attachUpload, processNext, recoverInterrupted, start, stop, recentTitles, isRunning: () => running }
 }
 
 export type ProductionQueue = ReturnType<typeof createProductionQueue>

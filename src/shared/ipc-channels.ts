@@ -2,8 +2,6 @@
 import type { SecretKey, SecretStatus, Settings } from './settings'
 import type { YoutubeAccountStatus, YoutubeDisconnectResult } from './youtube/accounts'
 import type { QueueSnapshot } from './youtube/queue'
-import type { RenderedVideo } from './contracts/modes'
-import type { Privacy } from './youtube/metadata'
 
 export const IPC = {
   appInfo: 'app:info',
@@ -38,12 +36,9 @@ export const IPC = {
   prodPause: 'production:pause',
   prodResume: 'production:resume',
   prodOpen: 'production:open',
-  modeRun: 'mode:run',
-  modeCancel: 'mode:cancel',
-  modeProgress: 'mode:progress',
+  prodDetail: 'production:detail',
+  prodPublish: 'production:publish',
   modeVoices: 'mode:voices',
-  modeOpen: 'mode:open',
-  modeEnqueue: 'mode:enqueue',
   modeSuggestTopics: 'mode:suggest-topics'
 } as const
 
@@ -55,25 +50,6 @@ export interface AppInfo {
 
 export type { QueueSnapshot, SecretKey, SecretStatus, Settings, YoutubeAccountStatus, YoutubeDisconnectResult }
 
-export type JobStage = 'script' | 'voice' | 'visual' | 'render' | 'thumbnail' | 'done'
-
-export interface ModeProgress {
-  jobId: string
-  stage: JobStage
-  percent: number
-  message: string
-}
-
-export interface ModeRunResult {
-  jobId: string
-  video: RenderedVideo
-  description: string
-  tags: string[]
-  /** Kalimat naskah, untuk ditampilkan di panel Naskah. */
-  sentences: string[]
-  warnings: string[]
-}
-
 /** Suara yang tergantung instalasi lokal. Suara cloud (Gemini, Deepgram) ada di src/shared/languages.ts. */
 export interface VoiceCatalog {
   piper: { name: string; lang: string }[]
@@ -84,17 +60,4 @@ export interface SuggestTopicsRequest {
   /** Niche yang sudah diketik pengguna; kosong = saran bebas. */
   seed: string
   language: string
-}
-
-export interface EnqueueJobRequest {
-  jobId: string
-  channelId: string
-  privacy: Privacy
-  /** True: tayang terjadwal di slot kosong berikutnya. */
-  schedule: boolean
-}
-
-export interface EnqueueJobResult {
-  queueId: number
-  publishAt: string | null
 }

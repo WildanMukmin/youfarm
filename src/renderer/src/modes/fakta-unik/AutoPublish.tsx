@@ -45,7 +45,7 @@ export default function AutoPublish({ value, onChange, onOpenAccounts }: Props) 
     <div className="grid gap-3 rounded-sm border border-line-hi p-3">
       <Checkbox
         label="Unggah otomatis setelah jadi"
-        hint="Berlaku untuk video yang diantrekan. Video langsung masuk antrean upload."
+        hint="Setelah video jadi, langsung masuk antrean upload."
         checked={value.enabled}
         disabled={accounts !== null && accounts.length === 0}
         onChange={(e) => onChange({ ...value, enabled: e.target.checked })}

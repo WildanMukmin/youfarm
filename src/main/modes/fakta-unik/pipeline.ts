@@ -4,6 +4,7 @@ import type { RenderedVideo } from '../../../shared/contracts/modes.ts'
 import {
   buildScriptPrompt,
   parseScript,
+  scriptLanguageMismatch,
   scriptLengthWarning,
   validateOptions,
   type FaktaScript,
@@ -124,7 +125,9 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
     for (let attempt = 0; attempt < 2 && !script; attempt++) {
       check()
       try {
-        script = parseScript(await deps.llm({ ...prompt, signal }))
+        const parsed = parseScript(await deps.llm({ ...prompt, signal }))
+        if (scriptLanguageMismatch(parsed, options.language)) throw new Error(`AI menulis naskah bukan dalam bahasa yang dipilih (${options.language}). Coba lagi atau pakai model lain.`)
+        script = parsed
       } catch (e) {
         lastErr = e
         if (signal?.aborted) throw e

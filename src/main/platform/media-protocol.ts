@@ -8,14 +8,14 @@ export function registerMediaScheme(): void {
 }
 
 /**
- * `youfarm-media://job/<jobId>/<kind>`. Path berkas tidak pernah datang dari renderer:
+ * `youfarm-media://prod/<id>/<kind>`. Path berkas tidak pernah datang dari renderer:
  * `resolve` hanya mengembalikan berkas yang dikenal main (hasil job), selain itu 404.
  */
-export function handleMediaProtocol(resolve: (jobId: string, kind: string) => string | undefined): void {
+export function handleMediaProtocol(resolve: (id: string, kind: string) => string | undefined): void {
   protocol.handle(MEDIA_SCHEME, (req) => {
     const u = new URL(req.url)
-    const [jobId, kind] = u.pathname.replace(/^\/+/, '').split('/')
-    const file = u.hostname === 'job' && jobId && kind ? resolve(jobId, kind) : undefined
+    const [id, kind] = u.pathname.replace(/^\/+/, '').split('/')
+    const file = u.hostname === 'prod' && id && kind ? resolve(id, kind) : undefined
     if (!file) return new Response('Tidak ditemukan', { status: 404 })
     return fileResponse(file, req.headers.get('range'))
   })

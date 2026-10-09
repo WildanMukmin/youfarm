@@ -1,14 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { EnqueueRequest } from '@shared/youtube/queue'
-import type { ProductionEnqueueRequest, ProductionSnapshot } from '@shared/production'
+import type { ProductionDetail, ProductionEnqueueRequest, ProductionPublishRequest, ProductionPublishResult, ProductionSnapshot } from '@shared/production'
 import type { TopicSuggestion } from '@shared/modes/fakta-unik'
 import {
   IPC,
   type AppInfo,
-  type EnqueueJobRequest,
-  type EnqueueJobResult,
-  type ModeProgress,
-  type ModeRunResult,
   type SuggestTopicsRequest,
   type VoiceCatalog,
   type QueueSnapshot,
@@ -49,18 +45,8 @@ const api = {
     setSlots: (channelId: string, times: string[]): Promise<YoutubeAccountStatus> => ipcRenderer.invoke(IPC.ytSetSlots, channelId, times)
   },
   modes: {
-    run: (jobId: string, mode: string, options: unknown): Promise<ModeRunResult> => ipcRenderer.invoke(IPC.modeRun, jobId, mode, options),
-    cancel: (jobId: string): Promise<boolean> => ipcRenderer.invoke(IPC.modeCancel, jobId),
     voices: (): Promise<VoiceCatalog> => ipcRenderer.invoke(IPC.modeVoices),
-    open: (jobId: string, what: 'file' | 'folder'): Promise<void> => ipcRenderer.invoke(IPC.modeOpen, jobId, what),
-    enqueue: (req: EnqueueJobRequest): Promise<EnqueueJobResult> => ipcRenderer.invoke(IPC.modeEnqueue, req),
-    suggestTopics: (req: SuggestTopicsRequest): Promise<TopicSuggestion[]> => ipcRenderer.invoke(IPC.modeSuggestTopics, req),
-    /** Dengar progres semua job. Mengembalikan fungsi untuk berhenti mendengar. */
-    onProgress: (cb: (p: ModeProgress) => void): (() => void) => {
-      const handler = (_e: unknown, p: ModeProgress): void => cb(p)
-      ipcRenderer.on(IPC.modeProgress, handler)
-      return () => ipcRenderer.removeListener(IPC.modeProgress, handler)
-    }
+    suggestTopics: (req: SuggestTopicsRequest): Promise<TopicSuggestion[]> => ipcRenderer.invoke(IPC.modeSuggestTopics, req)
   },
   production: {
     snapshot: (): Promise<ProductionSnapshot> => ipcRenderer.invoke(IPC.prodSnapshot),
@@ -70,7 +56,9 @@ const api = {
     remove: (id: number): Promise<ProductionSnapshot> => ipcRenderer.invoke(IPC.prodRemove, id),
     pause: (): Promise<ProductionSnapshot> => ipcRenderer.invoke(IPC.prodPause),
     resume: (): Promise<ProductionSnapshot> => ipcRenderer.invoke(IPC.prodResume),
-    open: (id: number, what: 'file' | 'folder'): Promise<void> => ipcRenderer.invoke(IPC.prodOpen, id, what)
+    open: (id: number, what: 'file' | 'folder'): Promise<void> => ipcRenderer.invoke(IPC.prodOpen, id, what),
+    detail: (id: number): Promise<ProductionDetail | null> => ipcRenderer.invoke(IPC.prodDetail, id),
+    publish: (req: ProductionPublishRequest): Promise<ProductionPublishResult> => ipcRenderer.invoke(IPC.prodPublish, req)
   },
   queue: {
     snapshot: (): Promise<QueueSnapshot> => ipcRenderer.invoke(IPC.queueSnapshot),
