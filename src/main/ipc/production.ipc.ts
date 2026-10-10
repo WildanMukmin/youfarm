@@ -1,4 +1,6 @@
-import { ipcMain, shell } from 'electron'
+import { readFile, stat } from 'node:fs/promises'
+import { extname } from 'node:path'
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { IPC } from '@shared/ipc-channels'
 import { PRODUCTION_MODE_IDS } from '@shared/contracts/modes'
 import type { ProductionDetail, ProductionEnqueueRequest, ProductionPublishRequest, ProductionPublishResult, ProductionSnapshot, PublishPlan } from '@shared/production'
@@ -12,6 +14,11 @@ import { getProductionQueue, pauseProductionQueue, resumeProductionQueue } from 
 import { deleteVideoFiles } from '../production/files'
 
 const PRIVACY: Privacy[] = ['private', 'unlisted', 'public']
+
+const THUMB_MAX_BYTES = 2 * 1024 * 1024
+const THUMB_MIME: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' }
+/** Thumbnail pilihan pengguna per job. Path hanya dikenal main; renderer cuma menyatakan "pakai yang dipilih". */
+const pickedThumbs = new Map<number, string>()
 
 function jobId(v: unknown): number {
   if (typeof v !== 'number' || !Number.isInteger(v) || v < 1) throw new Error('ID job tidak valid.')
@@ -69,9 +76,31 @@ export function registerProductionIpc(): void {
     const rec = q().result(id)
     if (!rec) throw new Error('Video ini belum jadi.')
     if (q().detail(id)?.uploadId) throw new Error('Video ini sudah masuk antrean upload.')
-    const out = enqueueRendered(rec, { channelId: req.channelId, privacy: req.privacy, schedule: req.schedule })
+    const out = enqueueRendered(rec, {
+      channelId: req.channelId,
+      privacy: req.privacy,
+      schedule: req.schedule,
+      title: req.title,
+      description: req.description,
+      tags: req.tags,
+      thumbnailPath: req.customThumbnail ? (pickedThumbs.get(id) ?? null) : null
+    })
+    pickedThumbs.delete(id)
     q().attachUpload(id, out.queueId)
     return out
+  })
+  ipcMain.handle(IPC.prodPickThumbnail, async (e, id: unknown): Promise<string | null> => {
+    const jid = jobId(id)
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const opts = { title: 'Pilih thumbnail', properties: ['openFile' as const], filters: [{ name: 'Gambar (JPG atau PNG)', extensions: ['jpg', 'jpeg', 'png'] }] }
+    const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    const file = r.filePaths[0]
+    if (r.canceled || !file) return null
+    const mime = THUMB_MIME[extname(file).toLowerCase()]
+    if (!mime) throw new Error('Thumbnail harus berupa JPG atau PNG.')
+    if ((await stat(file)).size > THUMB_MAX_BYTES) throw new Error('Thumbnail maksimal 2 MB (batas YouTube).')
+    pickedThumbs.set(jid, file)
+    return `data:${mime};base64,${(await readFile(file)).toString('base64')}`
   })
   ipcMain.handle(IPC.prodCancel, (_e, id: unknown): ProductionSnapshot => (q().cancel(jobId(id)), q().snapshot()))
   ipcMain.handle(IPC.prodRetry, (_e, id: unknown): ProductionSnapshot => (q().retry(jobId(id)), q().snapshot()))

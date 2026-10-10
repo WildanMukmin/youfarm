@@ -10,6 +10,15 @@ export const PRODUCTION_MODE_IDS = MODE_IDS.filter((m): m is ProductionModeId =>
 
 export type AspectRatio = '9:16' | '16:9' | '1:1'
 
+export const ASPECT_RATIOS: AspectRatio[] = ['9:16', '16:9', '1:1']
+
+/** Label dan resolusi render tiap format. Lebar/tinggi dipakai ffmpeg untuk scale+crop dan ukuran canvas caption. */
+export const ASPECT_INFO: Record<AspectRatio, { label: string; width: number; height: number }> = {
+  '9:16': { label: 'Vertikal · 9:16', width: 1080, height: 1920 },
+  '16:9': { label: 'Horizontal · 16:9', width: 1920, height: 1080 },
+  '1:1': { label: 'Persegi · 1:1', width: 1080, height: 1080 }
+}
+
 /** Hasil satu mode produksi. Antrean, Library, dan Upload hanya mengenal bentuk ini. */
 export interface RenderedVideo {
   /** Berkas video hasil render. */

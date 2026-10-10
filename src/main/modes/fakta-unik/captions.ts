@@ -70,13 +70,19 @@ function chunkIntro(style: CaptionStyle): string {
 }
 
 /**
- * Berkas ASS 1080x1920 dari potongan bertimestamp. Bila kata aktif disorot (warna atau zoom), tiap kata jadi satu
- * event supaya sorotnya hanya menyala saat kata itu diucapkan. Font harus ada di folder font untuk ffmpeg
- * atau terpasang di Windows; huruf yang tidak ada diambil libass dari font sistem.
+ * Berkas ASS dari potongan bertimestamp, berukuran `dims` (bawaan 1080x1920). Bila kata aktif disorot (warna atau
+ * zoom), tiap kata jadi satu event supaya sorotnya hanya menyala saat kata itu diucapkan. Font harus ada di folder
+ * font untuk ffmpeg atau terpasang di Windows; huruf yang tidak ada diambil libass dari font sistem.
  */
-export function toAss(chunks: CaptionChunk[], style: CaptionStyle, language: string): string {
-  const W = CAPTION_REF_WIDTH
-  const H = CAPTION_REF_HEIGHT
+export function toAss(chunks: CaptionChunk[], style: CaptionStyle, language: string, dims: { width: number; height: number } = { width: CAPTION_REF_WIDTH, height: CAPTION_REF_HEIGHT }): string {
+  const W = dims.width
+  const H = dims.height
+  // Ukuran dan garis di CaptionStyle dirancang untuk frame setinggi acuan (1920); format lain diskalakan sebanding tingginya.
+  const scale = H / CAPTION_REF_HEIGHT
+  const size = Math.round(style.size * scale)
+  const outline = Math.round(style.outline * scale)
+  const shadow = Math.round(style.shadow * scale)
+
   // Kolom selebar frame dikurangi margin tepi; tag pos menaruh titik jangkar di tepi kolom sesuai perataan,
   // dan MarginL/MarginR event membatasi lebar bungkus baris.
   const margin = Math.round((CAPTION_SIDE_MARGIN / 100) * W)
@@ -87,8 +93,8 @@ export function toAss(chunks: CaptionChunk[], style: CaptionStyle, language: str
   // BorderStyle 3: kotak latar di belakang tiap baris; libass mewarnainya dengan OutlineColour dan
   // memakai nilai Outline sebagai jarak tepi kotak.
   const border = style.box
-    ? { style: 3, color: assColor(style.boxColor, style.boxOpacity), size: Math.max(10, Math.round(style.size * 0.18)) }
-    : { style: 1, color: assColor(style.outlineColor), size: style.outline }
+    ? { style: 3, color: assColor(style.boxColor, style.boxOpacity), size: Math.max(10, Math.round(size * 0.18)) }
+    : { style: 1, color: assColor(style.outlineColor), size: outline }
   const shadowColor = assColor('#000000', 55)
 
   const header = [
@@ -101,7 +107,7 @@ export function toAss(chunks: CaptionChunk[], style: CaptionStyle, language: str
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    `Style: Caption,${style.font},${style.size},${primary},${primary},${border.color},${shadowColor},${style.bold ? -1 : 0},0,0,0,100,100,0,0,${border.style},${border.size},${style.shadow},5,${margin},${margin},0,1`,
+    `Style: Caption,${style.font},${size},${primary},${primary},${border.color},${shadowColor},${style.bold ? -1 : 0},0,0,0,100,100,0,0,${border.style},${border.size},${shadow},5,${margin},${margin},0,1`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text'

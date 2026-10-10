@@ -73,7 +73,9 @@ const api = {
     resume: (): Promise<ProductionSnapshot> => ipcRenderer.invoke(IPC.prodResume),
     open: (id: number, what: 'file' | 'folder'): Promise<void> => ipcRenderer.invoke(IPC.prodOpen, id, what),
     detail: (id: number): Promise<ProductionDetail | null> => ipcRenderer.invoke(IPC.prodDetail, id),
-    publish: (req: ProductionPublishRequest): Promise<ProductionPublishResult> => ipcRenderer.invoke(IPC.prodPublish, req)
+    publish: (req: ProductionPublishRequest): Promise<ProductionPublishResult> => ipcRenderer.invoke(IPC.prodPublish, req),
+    /** Buka dialog pilih gambar; mengembalikan pratinjau (data URL) atau null bila dibatalkan. */
+    pickThumbnail: (id: number): Promise<string | null> => ipcRenderer.invoke(IPC.prodPickThumbnail, id)
   },
   queue: {
     snapshot: (): Promise<QueueSnapshot> => ipcRenderer.invoke(IPC.queueSnapshot),

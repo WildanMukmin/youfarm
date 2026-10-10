@@ -2,11 +2,14 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   DEFAULT_OPTIONS,
+  MAX_TARGET_SEC,
+  MIN_TARGET_SEC,
   buildScriptPrompt,
   parseScript,
   buildTopicPrompt,
   parseTopics,
   scriptLengthWarning,
+  sentenceRange,
   targetLength,
   validateOptions
 } from '../../src/shared/modes/fakta-unik.ts'
@@ -17,12 +20,19 @@ test('validateOptions: topik wajib, nilai tak valid kembali ke bawaan, avoid dir
   assert.throws(() => validateOptions({ topic: 'x'.repeat(201) }), /terlalu panjang/)
   assert.throws(() => validateOptions(null), /minimal 3/)
 
-  const o = validateOptions({ topic: '  fakta   laut  ', language: 'xx', targetSec: 99, voiceSource: 'x', captionStyle: 'neon', stockSource: 'shutterstock', avoid: ['  a ', '', 5, 'b'], voiceName: ' Kore ' })
+  const o = validateOptions({ topic: '  fakta   laut  ', language: 'xx', targetSec: 'bukan angka', voiceSource: 'x', captionStyle: 'neon', stockSource: 'shutterstock', aspect: '21:9', avoid: ['  a ', '', 5, 'b'], voiceName: ' Kore ' })
   assert.equal(o.topic, 'fakta laut')
   assert.equal(o.language, DEFAULT_OPTIONS.language)
   assert.equal(o.targetSec, DEFAULT_OPTIONS.targetSec)
   assert.equal(o.voiceSource, DEFAULT_OPTIONS.voiceSource)
+  assert.equal(o.aspect, DEFAULT_OPTIONS.aspect)
   assert.deepEqual(o.caption, DEFAULT_CAPTION)
+  // Durasi bebas (bukan lagi preset): dijepit ke rentangnya, bukan ditolak.
+  assert.equal(validateOptions({ topic: 'fakta laut', targetSec: 99999 }).targetSec, MAX_TARGET_SEC)
+  assert.equal(validateOptions({ topic: 'fakta laut', targetSec: 1 }).targetSec, MIN_TARGET_SEC)
+  assert.equal(validateOptions({ topic: 'fakta laut', targetSec: 600 }).targetSec, 600, 'tanpa batas praktis')
+  assert.equal(validateOptions({ topic: 'fakta laut', targetSec: 90 }).targetSec, 90)
+  assert.equal(validateOptions({ topic: 'fakta laut', aspect: '16:9' }).aspect, '16:9')
   // Bahasa lain dan sumber suara baru diterima; antrean lama dengan nama preset caption tetap terbaca.
   const more = validateOptions({ topic: 'fakta laut', language: 'ja', voiceSource: 'deepgram', captionStyle: 'kotak-gelap' })
   assert.equal(more.language, 'ja')
@@ -77,8 +87,10 @@ test('parseScript: menolak bentuk yang tidak bisa dipakai', () => {
   assert.throws(() => parseScript({}), /judul/)
   assert.throws(() => parseScript({ title: 'x', sentences: [{ text: 'a' }, { text: 'b' }] }), /terlalu pendek/)
   assert.throws(() => parseScript('bukan objek'), /judul/)
-  const many = parseScript({ title: 'x', sentences: Array.from({ length: 30 }, (_, i) => ({ text: `k${i}`, keywords: ['a'] })) })
-  assert.equal(many.sentences.length, 14, 'dibatasi 14 kalimat')
+  const many = parseScript({ title: 'x', sentences: Array.from({ length: 900 }, (_, i) => ({ text: `k${i}`, keywords: ['a'] })) })
+  assert.equal(many.sentences.length, 720, 'dibatasi 720 kalimat')
+  assert.deepEqual(sentenceRange(45), { min: 6, max: 10 })
+  assert.deepEqual(sentenceRange(300), { min: 33, max: 60 })
 })
 
 test('scriptLengthWarning: peringatan hanya bila jauh dari target', () => {

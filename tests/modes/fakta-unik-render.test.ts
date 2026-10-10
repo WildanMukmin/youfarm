@@ -66,6 +66,17 @@ test('toAss dan toSrt: format waktu, gaya, sorot kata aktif, dan perataan', () =
   assert.match(toSrt([{ start: 0, end: 1, words: [{ text: '深海', start: 0, end: 0.5 }, { text: 'には', start: 0.5, end: 1 }] }], 'ja'), /深海には/)
 })
 
+test('toAss: dims lain mengubah PlayRes dan menjepit ukuran sebanding tingginya', () => {
+  const chunks = [{ start: 0, end: 1, words: [{ text: 'Halo', start: 0, end: 1 }] }]
+  // 16:9 (tinggi 1080, acuan 1920): ukuran huruf dan outline diskalakan sebanding tingginya (0.5625x).
+  const wide = toAss(chunks, { ...DEFAULT_CAPTION, animation: 'none' }, 'id', { width: 1920, height: 1080 })
+  assert.match(wide, /PlayResX: 1920/)
+  assert.match(wide, /PlayResY: 1080/)
+  assert.match(wide, new RegExp(`Style: Caption,Poppins,${Math.round(DEFAULT_CAPTION.size * (1080 / 1920))},`))
+  // Posisi tetap sebanding (persen tinggi), bukan piksel acuan: 68% dari 1080 = 734.
+  assert.match(wide, /\\pos\(960,734\)/)
+})
+
 test('buildRenderArgs: struktur filter dan pemetaan', () => {
   const args = buildRenderArgs({
     segments: [{ path: 'a.mp4', duration: 2 }, { path: 'b.mp4', duration: 1.5 }],

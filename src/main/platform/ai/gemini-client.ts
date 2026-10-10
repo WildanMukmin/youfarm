@@ -1,3 +1,4 @@
+import { tailBurstStart } from '../voice/pcm.ts'
 import { parseGeminiModels } from './gemini-models.ts'
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta'
@@ -184,7 +185,11 @@ export function createGeminiClient(opts: GeminiClientOptions): GeminiClient {
       const inline = json.candidates?.[0]?.content?.parts?.find((x) => x.inlineData?.data)?.inlineData
       if (!inline?.data) throw new GeminiError('bad', 'Gemini tidak mengembalikan audio. Pastikan model yang dipilih mendukung suara (TTS).')
       const rate = Number(inline.mimeType?.match(/rate=(\d+)/)?.[1] ?? 24000)
-      return pcmToWav(Buffer.from(inline.data, 'base64'), rate)
+      const raw = Buffer.from(inline.data, 'base64')
+      // Gemini menutup audio dengan semburan derau skala penuh; buang supaya tidak terdengar sebagai kresek di akhir video.
+      const pcm = new Int16Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.length - (raw.length % 2)))
+      const keep = tailBurstStart(pcm, rate)
+      return pcmToWav(keep < pcm.length ? raw.subarray(0, keep * 2) : raw, rate)
     }
   }
 }

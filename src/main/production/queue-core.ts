@@ -1,5 +1,5 @@
 import type { Sqlite } from '../platform/sqlite.ts'
-import type { RenderedVideo } from '../../shared/contracts/modes.ts'
+import { ASPECT_RATIOS, type AspectRatio, type RenderedVideo } from '../../shared/contracts/modes.ts'
 import {
   MAX_BATCH,
   type ProductionDetail,
@@ -57,6 +57,16 @@ interface Row {
   finished_at: string | null
 }
 
+/** Format yang diminta di opsi job. Semua mode memakai nama kolom `aspect`; bila tak ada, vertikal. */
+function requestedAspect(optionsJson: string): AspectRatio {
+  try {
+    const a = (JSON.parse(optionsJson) as { aspect?: unknown }).aspect
+    return ASPECT_RATIOS.includes(a as AspectRatio) ? (a as AspectRatio) : '9:16'
+  } catch {
+    return '9:16'
+  }
+}
+
 export type ProductionOutcome = 'idle' | 'done' | 'failed' | 'cancelled'
 
 export function createProductionQueue(deps: ProductionDeps) {
@@ -86,6 +96,7 @@ export function createProductionQueue(deps: ProductionDeps) {
       warning: r.warning,
       title: r.title,
       durationSec: result?.video.durationSec ?? null,
+      aspect: result?.video.aspect ?? requestedAspect(r.options_json),
       publish: r.publish_json ? (JSON.parse(r.publish_json) as PublishPlan) : null,
       uploadId: r.upload_id,
       attempts: r.attempts,

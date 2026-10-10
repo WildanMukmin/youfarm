@@ -8,3 +8,5 @@ export const formatDateTime = (iso: string): string => dateTime.format(new Date(
 export const formatSlot = (iso: string): string => slot.format(new Date(iso))
 /** "07:00" -> "07.00" (gaya penulisan jam Indonesia). */
 export const formatClock = (hhmm: string): string => hhmm.replace(':', '.')
+/** Detik jadi "m:ss", mis. 75 -> "1:15". */
+export const formatDuration = (sec: number): string => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`

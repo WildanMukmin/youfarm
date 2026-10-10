@@ -19,14 +19,19 @@ export interface RenderPlan {
   fontsDir: string
   output: string
   bitrateKbps: number
+  /** Resolusi video akhir. Bawaan: 1080x1920 (vertikal). */
+  width?: number
+  height?: number
 }
 
 /**
- * Susun argumen ffmpeg: tiap segmen di-crop ke 9:16, disambung, diberi caption, lalu digabung narasi.
+ * Susun argumen ffmpeg: tiap segmen di-crop ke resolusi target, disambung, diberi caption, lalu digabung narasi.
  * ffmpeg harus dijalankan dengan `cwd` = folder kerja yang berisi `assFile` dan `fontsDir`.
  */
 export function buildRenderArgs(p: RenderPlan): string[] {
   if (p.segments.length === 0) throw new Error('Tidak ada segmen untuk dirender.')
+  const width = p.width ?? WIDTH
+  const height = p.height ?? HEIGHT
 
   const args: string[] = []
   const filters: string[] = []
@@ -34,7 +39,7 @@ export function buildRenderArgs(p: RenderPlan): string[] {
     // -stream_loop sebelum -i mengulang footage pendek; -t membatasi ke durasi segmen.
     args.push('-stream_loop', '-1', '-t', s.duration.toFixed(3), '-i', s.path)
     filters.push(
-      `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},fps=${FPS},setsar=1,format=yuv420p,setpts=PTS-STARTPTS[v${i}]`
+      `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${FPS},setsar=1,format=yuv420p,setpts=PTS-STARTPTS[v${i}]`
     )
   })
   const n = p.segments.length

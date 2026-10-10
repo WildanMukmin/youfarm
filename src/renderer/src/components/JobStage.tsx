@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
 import { Check } from 'lucide-react'
+import { ASPECT_INFO, type AspectRatio } from '@shared/contracts/modes'
 import { mediaUrl } from '@shared/media'
 import type { ProductionDetail, ProductionJob } from '@shared/production'
 import { useElementSize } from '@/hooks/useFitRows'
+import { formatDuration } from '@/lib/format'
 import Button from '@/ui/Button'
 import Notice from '@/ui/Notice'
 import ProgressBar from '@/ui/ProgressBar'
@@ -14,8 +16,6 @@ const STEPS: { id: string; label: string }[] = [
   { id: 'render', label: 'Render' },
   { id: 'thumbnail', label: 'Thumbnail' }
 ]
-
-const mmss = (sec: number): string => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`
 
 interface Props {
   /** Video yang ditampilkan; null bila belum ada. */
@@ -33,6 +33,8 @@ interface Props {
   idle?: ReactNode
   /** Tampilkan `idle` walau ada video. */
   forceIdle?: boolean
+  /** Bentuk bingkai saat belum ada video (format yang dipilih di form). Video yang ada memakai formatnya sendiri. */
+  idleAspect?: AspectRatio
 }
 
 /** Saat sempit hanya label langkah aktif yang ditampilkan; sisanya cukup nomor. */
@@ -63,10 +65,15 @@ function Stepper({ job, compact }: { job: ProductionJob | null; compact: boolean
 }
 
 /** Area tengah ruang kerja mode produksi: bingkai 9:16 untuk pratinjau, progres, atau hasil satu video antrean. */
-export default function JobStage({ job, detail, paused, onCancel, onRetry, onResume, onOpen, idleHint, idle, forceIdle }: Props) {
+export default function JobStage({ job, detail, paused, onCancel, onRetry, onResume, onOpen, idleHint, idle, forceIdle, idleAspect = '9:16' }: Props) {
   const area = useElementSize()
   const showIdle = forceIdle || !job
   const problem = !showIdle && job && (job.status === 'failed' || job.status === 'cancelled')
+  const aspect = showIdle ? idleAspect : (job?.aspect ?? idleAspect)
+  const { width: aw, height: ah } = ASPECT_INFO[aspect]
+  // Bingkai sebanding format dan selalu muat di area: dibatasi tinggi area, lebar area (dikurangi panel galat), dan 720px.
+  const room = problem ? 'calc(100cqw - 312px)' : '100cqw'
+  const frameHeight = `min(100cqh, 720px, calc(${room} * ${ah} / ${aw}))`
 
   return (
     <div ref={area.ref} className="flex min-h-0 flex-1 flex-col">
@@ -74,13 +81,13 @@ export default function JobStage({ job, detail, paused, onCancel, onRetry, onRes
 
       <div className="flex min-h-0 flex-1 items-center justify-center gap-6 overflow-hidden p-6" style={{ containerType: 'size' }}>
         <div
-          className="relative aspect-[9/16] shrink-0 overflow-hidden rounded-md border border-line-hi bg-bg"
-          style={{ height: problem ? 'min(100cqh, 720px, calc((100cqw - 312px) * 16 / 9))' : 'min(100cqh, 720px, calc(100cqw * 16 / 9))' }}
+          className="relative shrink-0 overflow-hidden rounded-md border border-line-hi bg-bg"
+          style={{ aspectRatio: `${aw} / ${ah}`, height: frameHeight }}
         >
           {showIdle ? (
             (idle ?? (
               <div className="flex h-full flex-col items-center justify-center gap-3 border-2 border-dashed border-line p-6 text-center">
-                <span className="font-mono text-xs uppercase tracking-widest text-ink-muted">9:16 · 1080×1920</span>
+                <span className="font-mono text-xs uppercase tracking-widest text-ink-muted">{aspect} · {aw}×{ah}</span>
                 <p className="text-sm text-ink-muted">{idleHint}</p>
               </div>
             ))
@@ -143,7 +150,7 @@ export default function JobStage({ job, detail, paused, onCancel, onRetry, onRes
             </span>
             {job.status === 'done' && detail && (
               <span>
-                {mmss(job.durationSec ?? 0)} · {detail.video.aspect} · {detail.video.language.toUpperCase()}
+                {formatDuration(job.durationSec ?? 0)} · {detail.video.aspect} · {detail.video.language.toUpperCase()}
               </span>
             )}
           </div>

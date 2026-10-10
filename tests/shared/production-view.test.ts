@@ -15,6 +15,7 @@ const job = (id: number, status: ProductionJob['status'], over: Partial<Producti
   warning: null,
   title: null,
   durationSec: null,
+  aspect: '9:16',
   publish: null,
   uploadId: null,
   attempts: 0,

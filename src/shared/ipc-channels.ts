@@ -46,6 +46,7 @@ export const IPC = {
   prodOpen: 'production:open',
   prodDetail: 'production:detail',
   prodPublish: 'production:publish',
+  prodPickThumbnail: 'production:pick-thumbnail',
   modeVoices: 'mode:voices',
   modeSuggestTopics: 'mode:suggest-topics'
 } as const

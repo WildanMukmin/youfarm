@@ -1,5 +1,5 @@
 /** Antrean produksi: membuat video di latar, satu per satu. Tipe dibagi antara main dan renderer. */
-import type { ProductionModeId, RenderedVideo } from './contracts/modes.ts'
+import type { AspectRatio, ProductionModeId, RenderedVideo } from './contracts/modes.ts'
 import type { Privacy } from './youtube/metadata.ts'
 
 /**
@@ -33,6 +33,8 @@ export interface ProductionJob {
   /** Judul video setelah jadi. */
   title: string | null
   durationSec: number | null
+  /** Format video yang diminta (dari opsi), atau hasil render bila sudah jadi. */
+  aspect: AspectRatio
   publish: PublishPlan | null
   /** ID item antrean upload bila sudah dimasukkan otomatis. */
   uploadId: number | null
@@ -61,6 +63,12 @@ export interface ProductionPublishRequest {
   privacy: Privacy
   /** True: tayang di jam tayang kosong berikutnya milik channel. */
   schedule: boolean
+  /** Hasil suntingan di panel Publikasi; kosong berarti memakai isi bawaan video. */
+  title?: string
+  description?: string
+  tags?: string[]
+  /** Pakai thumbnail yang baru dipilih lewat `pickThumbnail` (bukan yang dibuat otomatis). */
+  customThumbnail?: boolean
 }
 
 export interface ProductionPublishResult {

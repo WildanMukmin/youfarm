@@ -1,27 +1,29 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { toast } from 'sonner'
 import { MAX_BATCH, splitTopics } from '@shared/production'
-import { TARGET_SECONDS, type FaktaUnikOptions } from '@shared/modes/fakta-unik'
+import type { AspectRatio } from '@shared/contracts/modes'
+import { DEFAULT_OPTIONS, MIN_TARGET_SEC, SHORTS_MAX_SEC, type FaktaUnikOptions } from '@shared/modes/fakta-unik'
 import { TEXT_PROVIDERS } from '@shared/settings'
 import { DEEPGRAM_VOICES, GEMINI_VOICES, LANGUAGE_LIST, languageInfo, voiceSourceSupports, type LanguageCode, type VoiceOption, type VoiceSource } from '@shared/languages'
 import type { SecretStatus } from '@shared/settings'
 import { STOCK_INFO, STOCK_SOURCES } from '@shared/stock'
 import type { VoiceCatalog } from '@shared/ipc-channels'
+import AspectPicker from '@/components/AspectPicker'
 import CaptionEditor from '@/components/CaptionEditor'
 import ModelSelect from '@/components/ModelSelect'
-import TopicSuggestions from '@/components/TopicSuggestions'
+import TopicComposer from '@/components/TopicComposer'
 import { useModelList } from '@/hooks/useModelList'
 import { useSettings } from '@/hooks/useSettings'
 import { useStickyState } from '@/hooks/useStickyState'
 import { refreshQueues } from '@/hooks/useQueue'
 import { errMsg } from '@/lib/errors'
 import Button from '@/ui/Button'
+import Field from '@/ui/Field'
 import Notice from '@/ui/Notice'
 import Panel from '@/ui/Panel'
 import PanelTabs from '@/ui/PanelTabs'
 import Segmented from '@/ui/Segmented'
 import Select from '@/ui/Select'
-import TextArea from '@/ui/TextArea'
 import AutoPublish, { DEFAULT_AUTO_PUBLISH, toPlan, type AutoPublishState } from './AutoPublish'
 
 export type FormTab = 'konten' | 'suara' | 'caption'
@@ -31,6 +33,9 @@ interface Props {
   setOpts: Dispatch<SetStateAction<FaktaUnikOptions>>
   tab: FormTab
   onTab: (tab: FormTab) => void
+  /** Format ekspor yang dicentang (minimal satu). Dipegang ruang kerja supaya pratinjau tengah ikut. */
+  aspects: AspectRatio[]
+  onAspects: (next: AspectRatio[]) => void
   /** Dipanggil setelah video masuk antrean produksi, dengan id job-nya. */
   onQueued: (ids: number[]) => void
   onOpenSettings: () => void
@@ -53,7 +58,7 @@ function textWriterIssue(opts: FaktaUnikOptions, status: SecretStatus): string |
 }
 
 /** Panel input mode Fakta Unik: tab Konten, Suara, dan Caption. Isian bertahan saat pindah menu. */
-export default function FaktaUnikForm({ opts, setOpts, tab, onTab, onQueued, onOpenSettings, onOpenQueue, onOpenAccounts }: Props) {
+export default function FaktaUnikForm({ opts, setOpts, tab, onTab, aspects, onAspects, onQueued, onOpenSettings, onOpenQueue, onOpenAccounts }: Props) {
   const { settings, status } = useSettings()
   const [voices, setVoices] = useState<VoiceCatalog | null>(null)
   const [publish, setPublish] = useStickyState<AutoPublishState>('fakta-unik:auto-publish', DEFAULT_AUTO_PUBLISH)
@@ -119,9 +124,11 @@ export default function FaktaUnikForm({ opts, setOpts, tab, onTab, onQueued, onO
   const loaded = Boolean(settings && status && voices)
   const topics = useMemo(() => splitTopics(opts.topic), [opts.topic])
   const short = topics.filter((t) => t.length < 3).length
-  const valid = topics.length > 0 && short === 0 && topics.length <= MAX_BATCH
+  const batch = topics.length * aspects.length
+  const valid = topics.length > 0 && short === 0 && aspects.length > 0 && batch <= MAX_BATCH
   const canRun = loaded && issues.length === 0 && valid
-  const label = topics.length > 1 ? `Buat ${topics.length} video` : 'Buat video'
+  const label = batch > 1 ? `Buat ${batch} video` : 'Buat video'
+
 
   const changeLanguage = (code: LanguageCode): void =>
     setOpts((o) => ({
@@ -139,11 +146,12 @@ export default function FaktaUnikForm({ opts, setOpts, tab, onTab, onQueued, onO
       return { ...o, topic: [...lines, ...list.filter((t) => !have.has(t.toLowerCase()))].join('\n') }
     })
 
-  /** Setiap video, satu atau banyak, masuk antrean produksi dengan salinan pengaturan saat ini. */
+  /** Tiap topik × tiap format dicentang masuk antrean produksi sebagai video sendiri, dengan salinan pengaturan saat ini. */
   const enqueue = async (): Promise<void> => {
     setQueueing(true)
     try {
-      const ids = await window.youfarm.production.enqueue({ mode: 'fakta-unik', options: topics.map((topic) => ({ ...opts, topic })), publish: toPlan(publish) })
+      const combos = topics.flatMap((topic) => aspects.map((aspect) => ({ ...opts, topic, aspect })))
+      const ids = await window.youfarm.production.enqueue({ mode: 'fakta-unik', options: combos, publish: toPlan(publish) })
       refreshQueues()
       toast.success(ids.length === 1 ? 'Video masuk antrean produksi.' : `${ids.length} video masuk antrean produksi.`, { action: { label: 'Lihat antrean', onClick: onOpenQueue } })
       setOpts((o) => ({ ...o, topic: '' }))
@@ -191,36 +199,28 @@ export default function FaktaUnikForm({ opts, setOpts, tab, onTab, onQueued, onO
     >
       {tab === 'konten' && (
         <div className="grid gap-4">
-          <TextArea
-            label="Topik"
-            aside={topics.length > 1 ? `${topics.length} video` : undefined}
+          <TopicComposer
+            mode="fakta-unik"
+            language={opts.language}
+            textProvider={opts.textProvider}
+            textModel={opts.textModel}
             value={opts.topic}
-            onChange={(e) => set('topic', e.target.value)}
-            placeholder={'Contoh: fakta aneh laut dalam\nSatu topik per baris untuk membuat banyak video sekaligus.'}
-            maxLength={8000}
-            rows={3}
+            onChange={(topic) => set('topic', topic)}
+            count={topics.length}
+            disabledReason={writerIssue ? `${writerIssue.replace(/\.$/, '')} untuk meminta AI memilihkan topik.` : null}
+            invalid={batch > MAX_BATCH || short > 0}
             hint={
-              topics.length > MAX_BATCH
-                ? `Maksimal ${MAX_BATCH} topik sekali antre.`
+              batch > MAX_BATCH
+                ? `Maksimal ${MAX_BATCH} video sekali antre (topik × format).`
                 : short
                   ? 'Tiap topik minimal 3 karakter.'
-                  : topics.length > 1
-                    ? 'Semua topik memakai pengaturan yang sama dan dibuat satu per satu.'
+                  : batch > 1
+                    ? `${batch} video akan dibuat satu per satu${aspects.length > 1 ? ` (${topics.length} topik × ${aspects.length} format)` : ''}.`
                     : undefined
             }
           />
 
-          <TopicSuggestions
-            mode="fakta-unik"
-            language={opts.language}
-            current={topics}
-            textProvider={opts.textProvider}
-            textModel={opts.textModel}
-            disabledReason={writerIssue ? `${writerIssue.replace(/\.$/, '')} untuk memakai saran topik.` : null}
-            onAdd={addTopics}
-          />
-
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_104px] items-start gap-3">
             <Select label="Bahasa" value={opts.language} onChange={(e) => changeLanguage(e.target.value as LanguageCode)}>
               {LANGUAGE_LIST.map((l) => (
                 <option key={l.code} value={l.code}>
@@ -228,13 +228,19 @@ export default function FaktaUnikForm({ opts, setOpts, tab, onTab, onQueued, onO
                 </option>
               ))}
             </Select>
-            <Segmented
-              label="Durasi"
-              value={String(opts.targetSec) as `${(typeof TARGET_SECONDS)[number]}`}
-              onChange={(v) => set('targetSec', Number(v) as FaktaUnikOptions['targetSec'])}
-              options={TARGET_SECONDS.map((s) => ({ value: String(s) as `${typeof s}`, label: `${s}s` }))}
+            <Field
+              label="Durasi (detik)"
+              type="number"
+              inputMode="numeric"
+              min={MIN_TARGET_SEC}
+              value={Number.isNaN(opts.targetSec) ? '' : opts.targetSec}
+              onChange={(e) => set('targetSec', e.target.valueAsNumber)}
+              onBlur={(e) => set('targetSec', Math.max(MIN_TARGET_SEC, Math.round(e.target.valueAsNumber || DEFAULT_OPTIONS.targetSec)))}
             />
           </div>
+          {opts.targetSec > SHORTS_MAX_SEC && <p className="-mt-2 text-xs text-ink-muted">Lebih dari 3 menit, video tidak lagi tampil sebagai Shorts di YouTube.</p>}
+
+          <AspectPicker value={aspects} onChange={onAspects} />
 
           <div className="grid gap-2">
             <Segmented

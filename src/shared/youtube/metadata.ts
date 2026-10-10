@@ -59,6 +59,12 @@ export interface UploadBody {
 /** YouTube menolak < dan > di judul, deskripsi, dan tag. */
 const stripAngle = (s: string): string => s.replace(/[<>]/g, '')
 
+/** Deskripsi yang diunggah: ringkasan, baris kredit, lalu tiga tag pertama sebagai hashtag. */
+export function composeDescription(p: { description: string; credits?: string[]; tags: string[] }): string {
+  const hashtags = p.tags.slice(0, 3).map((t) => `#${t.replace(/\s+/g, '')}`).join(' ')
+  return [p.description, p.credits?.join('\n'), hashtags].filter(Boolean).join('\n\n')
+}
+
 export function sanitizeTitle(s: string): string {
   return [...stripAngle(s).replace(/\s+/g, ' ').trim()].slice(0, TITLE_MAX).join('').trim()
 }

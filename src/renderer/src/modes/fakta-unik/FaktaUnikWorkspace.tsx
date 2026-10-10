@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import type { AspectRatio } from '@shared/contracts/modes'
 import type { ProductionDetail } from '@shared/production'
 import CaptionPreview from '@/components/CaptionPreview'
 import JobStage from '@/components/JobStage'
@@ -25,6 +26,8 @@ export default function FaktaUnikWorkspace({ onNavigate }: ViewProps) {
   const [tab, setTab] = useState<RightTab>('naskah')
   // Video yang dipilih pengguna (klik di daftar, atau baru dimasukkan). Tanpa pilihan: yang sedang dibuat, lalu yang terbaru.
   const [pinned, setPinned] = useStickyState<number | null>('fakta-unik:pinned', null)
+  // Format yang dicentang di form; bingkai pratinjau kosong mengikuti yang pertama.
+  const [aspects, setAspects] = useStickyState<AspectRatio[]>('fakta-unik:aspects', ['9:16'])
   const { production, prod } = useQueue()
 
   const jobs = (production?.items ?? []).filter((j) => j.mode === 'fakta-unik')
@@ -75,8 +78,8 @@ export default function FaktaUnikWorkspace({ onNavigate }: ViewProps) {
     <Workspace
       title="Fakta Unik"
       leftWidth={320}
-      rightWidth={300}
-      subtitle="Satu topik jadi Short 30–60 detik: naskah, suara, footage, caption."
+      rightWidth={340}
+      subtitle="Satu topik jadi video pendek: naskah, suara, footage, caption."
       actions={status}
       left={
         <FaktaUnikForm
@@ -84,6 +87,8 @@ export default function FaktaUnikWorkspace({ onNavigate }: ViewProps) {
           setOpts={setOpts}
           tab={formTab}
           onTab={setFormTab}
+          aspects={aspects}
+          onAspects={setAspects}
           onQueued={(ids) => {
             show(ids[0] ?? null)
             refreshQueues()
@@ -114,6 +119,7 @@ export default function FaktaUnikWorkspace({ onNavigate }: ViewProps) {
         onResume={() => void prod.resume()}
         onOpen={(id, what) => void open(id, what)}
         idleHint="Isi topik di panel kiri, lalu klik Buat video. Pratinjau muncul di sini."
+        idleAspect={aspects[0]}
         idle={<CaptionPreview style={opts.caption} language={opts.language} />}
         forceIdle={formTab === 'caption'}
       />

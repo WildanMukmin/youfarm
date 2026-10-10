@@ -3,12 +3,17 @@
  * dan pipeline di main. Mode lain tidak boleh mengimpor file ini.
  */
 
+import { ASPECT_RATIOS, type AspectRatio } from '../contracts/modes.ts'
 import { CAPTION_TEMPLATES, DEFAULT_CAPTION, sanitizeCaption, type CaptionStyle } from '../captions.ts'
 import { LANGUAGE_CODES, VOICE_SOURCES, languageInfo, speechUnits, type LanguageCode, type VoiceSource } from '../languages.ts'
 import { TEXT_PROVIDERS, type TextProvider } from '../settings.ts'
 import { STOCK_SOURCES } from '../stock.ts'
 
-export const TARGET_SECONDS = [30, 45, 60] as const
+/** Durasi target bebas (detik). Batas atas hanya pengaman agar prompt dan naskah tidak absurd; form tidak membatasinya. */
+export const MIN_TARGET_SEC = 5
+export const MAX_TARGET_SEC = 3600
+/** Di atas ini video tidak lagi tampil sebagai Shorts di YouTube. */
+export const SHORTS_MAX_SEC = 180
 
 export interface FaktaUnikOptions {
   /** Topik atau niche, mis. "fakta aneh tentang laut dalam". */
@@ -19,13 +24,16 @@ export interface FaktaUnikOptions {
   /** Model Gemini untuk suara (dipakai bila sumber suara Gemini TTS). */
   ttsModel: string
   language: LanguageCode
-  targetSec: (typeof TARGET_SECONDS)[number]
+  /** Detik, dijepit ke [MIN_TARGET_SEC, MAX_TARGET_SEC] saat divalidasi. */
+  targetSec: number
   voiceSource: VoiceSource
   /** ID suara (Gemini: mis. "Kore"; Deepgram: "aura-2-thalia-en"; Piper: nama model). Kosong = bawaan. */
   voiceName: string
   caption: CaptionStyle
   /** Penyedia footage stock. */
   stockSource: (typeof STOCK_SOURCES)[number]
+  /** Format video akhir. Memilih beberapa format di form berarti video ini diulang sekali per format. */
+  aspect: AspectRatio
   /** Topik yang sudah pernah dipakai, supaya tidak berulang. */
   avoid: string[]
 }
@@ -41,6 +49,7 @@ export const DEFAULT_OPTIONS: FaktaUnikOptions = {
   voiceName: '',
   caption: DEFAULT_CAPTION,
   stockSource: 'pixabay',
+  aspect: '9:16',
   avoid: []
 }
 
@@ -74,17 +83,25 @@ export function validateOptions(input: unknown): FaktaUnikOptions {
   const pick = <T extends readonly (string | number)[]>(list: T, v: unknown, fallback: T[number]): T[number] =>
     (list as readonly unknown[]).includes(v) ? (v as T[number]) : fallback
 
+  // Angka tak valid (string, NaN) kembali ke bawaan; angka di luar rentang dijepit, bukan ditolak.
+  const targetSec = (): number => {
+    const n = typeof o.targetSec === 'number' ? o.targetSec : Number(o.targetSec)
+    if (!Number.isFinite(n)) return DEFAULT_OPTIONS.targetSec
+    return Math.min(MAX_TARGET_SEC, Math.max(MIN_TARGET_SEC, Math.round(n)))
+  }
+
   return {
     topic,
     textProvider: pick(TEXT_PROVIDERS, o.textProvider, DEFAULT_OPTIONS.textProvider),
     textModel: typeof o.textModel === 'string' ? o.textModel.trim().slice(0, 100) : '',
     ttsModel: typeof o.ttsModel === 'string' ? o.ttsModel.trim().slice(0, 100) : '',
     language: pick(LANGUAGE_CODES, o.language, DEFAULT_OPTIONS.language),
-    targetSec: pick(TARGET_SECONDS, o.targetSec, DEFAULT_OPTIONS.targetSec),
+    targetSec: targetSec(),
     voiceSource: pick(VOICE_SOURCES, o.voiceSource, DEFAULT_OPTIONS.voiceSource),
     voiceName: typeof o.voiceName === 'string' ? o.voiceName.trim().slice(0, 80) : '',
     caption: captionFrom(o),
     stockSource: pick(STOCK_SOURCES, o.stockSource, DEFAULT_OPTIONS.stockSource),
+    aspect: pick(ASPECT_RATIOS, o.aspect, DEFAULT_OPTIONS.aspect),
     avoid: Array.isArray(o.avoid) ? o.avoid.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean).slice(0, 50) : []
   }
 }
@@ -95,10 +112,16 @@ export function targetLength(o: Pick<FaktaUnikOptions, 'language' | 'targetSec'>
   return { amount: Math.round(lang.rate * o.targetSec), unit: lang.unit === 'char' ? 'karakter' : 'kata' }
 }
 
+/** Jumlah kalimat yang diminta dari AI; makin panjang durasi, makin banyak kalimat (sekitar satu per 5 sampai 9 detik). */
+export function sentenceRange(targetSec: number): { min: number; max: number } {
+  return { min: Math.max(6, Math.round(targetSec / 9)), max: Math.max(10, Math.round(targetSec / 5)) }
+}
+
 export function buildScriptPrompt(o: FaktaUnikOptions): { system: string; user: string } {
   const lang = languageInfo(o.language)
   const len = targetLength(o)
   const perSentence = lang.unit === 'char' ? '12 sampai 45 karakter' : '6 sampai 22 kata'
+  const { min, max } = sentenceRange(o.targetSec)
   const system = [
     'Kamu penulis naskah video pendek vertikal "fakta unik" untuk YouTube Shorts.',
     'Tulis naskah yang akurat, menarik, dan orisinal. Jangan mengarang angka atau klaim yang tidak pasti; bila ragu, pilih fakta lain.',
@@ -111,7 +134,7 @@ export function buildScriptPrompt(o: FaktaUnikOptions): { system: string; user: 
   const user = [
     `Topik: ${o.topic}`,
     `Bahasa naskah: ${lang.promptName}.`,
-    `Total sekitar ${len.amount} ${len.unit} (target ${o.targetSec} detik), dibagi 6 sampai 10 kalimat. Tiap kalimat ${perSentence}, mudah diucapkan.`,
+    `Total sekitar ${len.amount} ${len.unit} (target ${o.targetSec} detik), dibagi ${min} sampai ${max} kalimat. Tiap kalimat ${perSentence}, mudah diucapkan.`,
     'Untuk tiap kalimat beri 2 sampai 3 kata kunci visual dalam bahasa Inggris untuk mencari footage stock: benda atau pemandangan yang konkret dan bisa difilmkan, bukan konsep abstrak.',
     avoid,
     '',
@@ -181,6 +204,9 @@ export function parseTopics(json: unknown): TopicSuggestion[] {
 const clean = (s: unknown): string => (typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : '')
 
 /** Validasi ketat keluaran AI. Melempar pesan jelas bila bentuknya tidak bisa dipakai. */
+/** Batas pengaman jumlah kalimat dari AI (cukup untuk durasi sangat panjang). */
+const MAX_SENTENCES = 720
+
 export function parseScript(json: unknown): FaktaScript {
   const j = (typeof json === 'object' && json !== null ? json : {}) as Record<string, unknown>
   const title = clean(j.title).slice(0, 100)
@@ -196,7 +222,7 @@ export function parseScript(json: unknown): FaktaScript {
     sentences.push({ text, keywords: keywords.length ? keywords : [title] })
   }
   if (sentences.length < 3) throw new Error('Naskah dari AI terlalu pendek (kurang dari 3 kalimat).')
-  if (sentences.length > 14) sentences.length = 14
+  if (sentences.length > MAX_SENTENCES) sentences.length = MAX_SENTENCES
 
   const tags = (Array.isArray(j.tags) ? j.tags : []).map(clean).filter(Boolean).slice(0, 12)
   return { title, sentences, description: clean(j.description), tags }

@@ -1,7 +1,7 @@
 import { disclosureFor, type ProductionModeId, type RenderedVideo } from '@shared/contracts/modes'
 import { DEFAULT_CATEGORY_ID as FAKTA_CATEGORY } from '@shared/modes/fakta-unik'
 import { isChannelId } from '@shared/youtube/accounts'
-import type { Privacy } from '@shared/youtube/metadata'
+import { composeDescription, type Privacy } from '@shared/youtube/metadata'
 import { nextFreeSlots } from '@shared/youtube/schedule'
 import { getAccountService } from '../youtube/account'
 import { getUploadQueue } from '../youtube/queue'
@@ -21,6 +21,12 @@ export interface PublishRequest {
   channelId: unknown
   privacy: unknown
   schedule: unknown
+  /** Suntingan pengguna. Yang tidak diisi memakai isi bawaan video. */
+  title?: unknown
+  description?: unknown
+  tags?: unknown
+  /** Berkas thumbnail pengganti yang sudah divalidasi main. */
+  thumbnailPath?: string | null
 }
 
 /**
@@ -43,18 +49,19 @@ export function enqueueRendered(rec: RenderedRecord, req: PublishRequest): { que
   }
 
   const { video } = rec
-  const hashtags = rec.tags.slice(0, 3).map((t) => `#${t.replace(/\s+/g, '')}`).join(' ')
+  const text = (v: unknown, fallback: string): string => (typeof v === 'string' && v.trim() ? v : fallback)
+  const tags = Array.isArray(req.tags) ? req.tags.filter((t): t is string => typeof t === 'string' && t.trim() !== '') : rec.tags
   const queueId = queue.enqueue({
     channelId,
     mode: video.mode,
     template: video.template,
     filePath: video.filePath,
-    thumbnailPath: video.thumbnailPath,
+    thumbnailPath: req.thumbnailPath ?? video.thumbnailPath,
     playlistId: null,
     input: {
-      title: video.title,
-      description: [rec.description, video.credits?.join('\n'), hashtags].filter(Boolean).join('\n\n'),
-      tags: rec.tags,
+      title: text(req.title, video.title),
+      description: text(req.description, composeDescription({ description: rec.description, credits: video.credits, tags })),
+      tags,
       categoryId: CATEGORY[video.mode] ?? '24',
       defaultLanguage: video.language,
       defaultAudioLanguage: video.language,

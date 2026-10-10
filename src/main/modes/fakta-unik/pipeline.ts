@@ -1,6 +1,6 @@
 import { copyFile, cp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { RenderedVideo } from '../../../shared/contracts/modes.ts'
+import { ASPECT_INFO, type RenderedVideo } from '../../../shared/contracts/modes.ts'
 import {
   buildScriptPrompt,
   parseScript,
@@ -16,7 +16,7 @@ import { StockError, pickVideo, type StockClient } from '../../platform/ai/stock
 import { REFRESH_RATE } from '../../../shared/footage.ts'
 import { clipKey, type FootageLibrary } from '../../platform/footage-library.ts'
 import { buildChunks, toAss, toSrt, type SentenceTiming } from './captions.ts'
-import { buildRenderArgs, HEIGHT, WIDTH, type ClipSegment } from './render.ts'
+import { buildRenderArgs, type ClipSegment } from './render.ts'
 
 export type Stage = 'script' | 'voice' | 'visual' | 'render' | 'thumbnail' | 'done'
 
@@ -101,13 +101,17 @@ export function wrapForThumbnail(text: string, maxChars = 14): string {
   return lines.slice(0, 4).join('\\N')
 }
 
-function thumbnailAss(title: string): string {
+function thumbnailAss(title: string, width: number, height: number): string {
   const text = wrapForThumbnail(title.toUpperCase()).replace(/[{}]/g, '')
+  // Ukuran dirancang untuk canvas vertikal (1080x1920); format lebih pendek diskalakan sebanding tingginya.
+  const scale = height / 1920
+  const size = Math.round(120 * scale)
+  const outline = Math.round(10 * scale)
   return [
-    '[Script Info]', 'ScriptType: v4.00+', 'PlayResX: 1080', 'PlayResY: 1920', 'WrapStyle: 2', 'ScaledBorderAndShadow: yes', '',
+    '[Script Info]', 'ScriptType: v4.00+', `PlayResX: ${width}`, `PlayResY: ${height}`, 'WrapStyle: 2', 'ScaledBorderAndShadow: yes', '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    'Style: Default,Poppins,120,&H0000F0FF,&H0000F0FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,10,3,5,60,60,0,1', '',
+    `Style: Default,Poppins,${size},&H0000F0FF,&H0000F0FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,${outline},3,5,60,60,0,1`, '',
     '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
     `Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,${text}`, ''
   ].join('\n')
@@ -174,9 +178,10 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
     const pads = speech.map((_, i) => (i === n - 1 ? LAST_PAD_SEC : SENTENCE_PAD_SEC))
     const narration = join(job, 'narration.wav')
     const inputs = wavs.flatMap((w) => ['-i', w])
+    // Limiter di akhir: TTS (terutama Gemini) sudah di 0 dBFS dengan puncak antar-sampel di atasnya, sehingga AAC meretak saat diputar.
     const chain = wavs.map((_, i) => `[${i}:a]aresample=44100,aformat=channel_layouts=mono,apad=pad_dur=${pads[i]}[a${i}]`)
     await deps.ffmpeg.run(
-      [...inputs, '-filter_complex', `${chain.join(';')};${wavs.map((_, i) => `[a${i}]`).join('')}concat=n=${n}:v=0:a=1[out]`, '-map', '[out]', narration],
+      [...inputs, '-filter_complex', `${chain.join(';')};${wavs.map((_, i) => `[a${i}]`).join('')}concat=n=${n}:v=0:a=1[cat];[cat]alimiter=limit=0.89:level=disabled[out]`, '-map', '[out]', narration],
       { signal }
     )
     report('voice', 32, 'Suara siap.')
@@ -267,8 +272,9 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
       return timing
     })
     const chunks = buildChunks(timings, options.language, options.caption.wordsPerChunk)
+    const { width, height } = ASPECT_INFO[options.aspect]
     await cp(deps.fontsDir, join(job, 'fonts'), { recursive: true, filter: (src) => !/\.txt$/i.test(src) })
-    await writeFile(join(job, 'captions.ass'), toAss(chunks, options.caption, options.language))
+    await writeFile(join(job, 'captions.ass'), toAss(chunks, options.caption, options.language, { width, height }))
     const base = `${slug(script.title)}-${stamp}`
     const srtPath = join(deps.outDir, `${base}.srt`)
     await writeFile(srtPath, toSrt(chunks, options.language), 'utf8')
@@ -278,17 +284,17 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
     const total = durations.reduce((a, b) => a + b, 0)
     const rawOut = join(job, 'out.mp4')
     await deps.ffmpeg.run(
-      buildRenderArgs({ segments, narrationPath: narration, assFile: 'captions.ass', fontsDir: 'fonts', output: rawOut, bitrateKbps: deps.bitrateKbps }),
+      buildRenderArgs({ segments, narrationPath: narration, assFile: 'captions.ass', fontsDir: 'fonts', output: rawOut, bitrateKbps: deps.bitrateKbps, width, height }),
       { signal, cwd: job, onProgress: (sec) => report('render', 62 + Math.round(Math.min(1, sec / total) * 28), 'Merender video…') }
     )
     const durationSec = await deps.ffmpeg.duration(rawOut)
 
     // 6. Thumbnail dari frame awal dengan judul besar.
     report('thumbnail', 92, 'Membuat thumbnail…')
-    await writeFile(join(job, 'thumb.ass'), thumbnailAss(script.title))
+    await writeFile(join(job, 'thumb.ass'), thumbnailAss(script.title, width, height))
     await deps.ffmpeg.run(
       // Frame dari footage mentah (bukan video akhir) supaya caption tidak ikut terbakar di thumbnail.
-      ['-ss', '0.8', '-i', segments[0].path, '-vf', `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},ass=thumb.ass:fontsdir=fonts`, '-frames:v', '1', '-q:v', '3', 'thumb.jpg'],
+      ['-ss', '0.8', '-i', segments[0].path, '-vf', `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},ass=thumb.ass:fontsdir=fonts`, '-frames:v', '1', '-q:v', '3', 'thumb.jpg'],
       { signal, cwd: job }
     )
 
@@ -306,7 +312,7 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
         thumbnailPath: thumbPath,
         captionPath: srtPath,
         durationSec,
-        aspect: '9:16',
+        aspect: options.aspect,
         mode: 'fakta-unik',
         template: null,
         title: script.title,

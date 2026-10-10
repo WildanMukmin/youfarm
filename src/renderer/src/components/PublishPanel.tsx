@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { ASPECT_INFO } from '@shared/contracts/modes'
+import { disclosureFor } from '@shared/contracts/modes'
+import { mediaUrl } from '@shared/media'
 import type { ProductionDetail } from '@shared/production'
-import type { Privacy } from '@shared/youtube/metadata'
+import { DESCRIPTION_MAX_BYTES, TITLE_MAX, composeDescription, type Privacy } from '@shared/youtube/metadata'
 import type { YoutubeAccountInfo } from '@shared/youtube/accounts'
 import { errMsg } from '@/lib/errors'
-import { formatClock, formatDateTime, formatSlot } from '@/lib/format'
+import { formatClock, formatDateTime, formatDuration, formatSlot } from '@/lib/format'
 import { upcomingSlots } from '@/lib/slots'
 import { refreshQueues, useQueue } from '@/hooks/useQueue'
 import Button from '@/ui/Button'
 import Checkbox from '@/ui/Checkbox'
+import Field from '@/ui/Field'
 import Notice from '@/ui/Notice'
 import Select from '@/ui/Select'
+import TextArea from '@/ui/TextArea'
 
 const PRIVACY: { value: Privacy; label: string }[] = [
   { value: 'public', label: 'Publik' },
@@ -32,6 +37,11 @@ export default function PublishPanel({ result, onOpenQueue, onOpenAccounts }: Pr
   const [privacy, setPrivacy] = useState<Privacy>('public')
   const [schedule, setSchedule] = useState(true)
   const [busy, setBusy] = useState(false)
+  // Isi yang akan diunggah, bisa disunting. Deskripsi awal sudah memuat kredit footage dan hashtag.
+  const [title, setTitle] = useState(result.video.title)
+  const [description, setDescription] = useState(() => composeDescription({ description: result.description, credits: result.video.credits, tags: result.tags }))
+  const [tagText, setTagText] = useState(result.tags.join(', '))
+  const [thumb, setThumb] = useState<string | null>(null)
   const [queued, setQueued] = useState<{ publishAt: string | null } | null>(null)
 
   useEffect(() => {
@@ -78,7 +88,8 @@ export default function PublishPanel({ result, onOpenQueue, onOpenAccounts }: Pr
   const submit = async () => {
     setBusy(true)
     try {
-      const r = await window.youfarm.production.publish({ id: result.id, channelId, privacy, schedule })
+      const tags = tagText.split(',').map((t) => t.trim()).filter(Boolean)
+      const r = await window.youfarm.production.publish({ id: result.id, channelId, privacy, schedule, title, description, tags, customThumbnail: thumb !== null })
       setQueued({ publishAt: r.publishAt })
       refreshQueues()
       toast.success('Video dimasukkan ke antrean upload.')
@@ -89,11 +100,60 @@ export default function PublishPanel({ result, onOpenQueue, onOpenAccounts }: Pr
     }
   }
 
+  const pickThumb = async (): Promise<void> => {
+    try {
+      const url = await window.youfarm.production.pickThumbnail(result.id)
+      if (url) setThumb(url)
+    } catch (e) {
+      toast.error(errMsg(e, 'Gagal memilih thumbnail.'))
+    }
+  }
+
+  const { width, height } = ASPECT_INFO[result.video.aspect]
+  const flags = disclosureFor(result.video.mode, result.video.syntheticMedia)
   const channel = accounts?.find((a) => a.channel.id === channelId)
   const nextSlot = channel ? upcomingSlots(channel.slots, snapshot?.items ?? [], channel.channel.id, 1)[0] : undefined
 
+  const descBytes = new TextEncoder().encode(description).length
+  const thumbSrc = thumb ?? (result.video.hasThumbnail ? mediaUrl(result.id, 'thumb') : null)
+
   return (
     <div className="grid gap-4">
+      <div className="grid gap-1.5">
+        <span className="text-xs text-ink-muted">Thumbnail</span>
+        <div className="flex items-end gap-3">
+          <div
+            className="grid shrink-0 place-items-center overflow-hidden rounded-sm border border-line-hi bg-panel-2"
+            style={{ aspectRatio: `${width} / ${height}`, height: 112, maxWidth: '100%' }}
+          >
+            {thumbSrc ? <img src={thumbSrc} alt="Thumbnail yang akan diunggah" className="h-full w-full object-cover" /> : <span className="px-2 text-center text-[11px] text-ink-muted">Tanpa thumbnail</span>}
+          </div>
+          <div className="grid min-w-0 gap-1.5">
+            <p className="font-mono text-[11px] text-ink-muted">
+              {formatDuration(result.video.durationSec)} · {result.video.aspect}
+            </p>
+            <Button variant="ghost" size="sm" onClick={() => void pickThumb()}>
+              Ganti…
+            </Button>
+            {thumb && (
+              <button className="justify-self-start text-xs text-crimson-hi underline underline-offset-2" onClick={() => setThumb(null)}>
+                Pakai bawaan
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      <Field label={`Judul · ${[...title].length}/${TITLE_MAX}`} value={title} maxLength={TITLE_MAX} onChange={(e) => setTitle(e.target.value)} />
+      <TextArea
+        label="Deskripsi"
+        aside={`${descBytes}/${DESCRIPTION_MAX_BYTES}`}
+        value={description}
+        rows={7}
+        onChange={(e) => setDescription(e.target.value)}
+        hint={descBytes > DESCRIPTION_MAX_BYTES ? 'Terlalu panjang; kelebihannya dipotong saat diunggah.' : undefined}
+        className="min-h-[140px]"
+      />
+      <Field label="Tag (pisahkan dengan koma)" value={tagText} onChange={(e) => setTagText(e.target.value)} />
       <div className="grid gap-4">
         <Select label="Channel tujuan" value={channelId} onChange={(e) => setChannelId(e.target.value)} disabled={!accounts}>
           {(accounts ?? []).map((a) => (
@@ -102,7 +162,7 @@ export default function PublishPanel({ result, onOpenQueue, onOpenAccounts }: Pr
             </option>
           ))}
         </Select>
-        <Select label="Privasi" value={privacy} onChange={(e) => setPrivacy(e.target.value as Privacy)} disabled={schedule}>
+        <Select label="Visibilitas" value={privacy} onChange={(e) => setPrivacy(e.target.value as Privacy)} disabled={schedule}>
           {PRIVACY.map((p) => (
             <option key={p.value} value={p.value}>
               {p.label}
@@ -129,8 +189,11 @@ export default function PublishPanel({ result, onOpenQueue, onOpenAccounts }: Pr
           </button>
         </div>
       )}
+      <p className="text-[11px] text-ink-muted">
+        {flags.containsSyntheticMedia ? 'Ditandai konten sintetis' : 'Tanpa tanda konten sintetis'} · {flags.madeForKids ? 'Dibuat untuk anak' : 'Bukan untuk anak'} · Bahasa {result.video.language.toUpperCase()}
+      </p>
       <div>
-        <Button disabled={!channelId || busy} onClick={() => void submit()}>
+        <Button disabled={!channelId || !title.trim() || busy} onClick={() => void submit()}>
           {busy ? 'Memasukkan…' : 'Masukkan ke antrean upload'}
         </Button>
       </div>

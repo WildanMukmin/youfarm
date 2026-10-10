@@ -2,13 +2,15 @@ import { useId, type SelectHTMLAttributes } from 'react'
 
 interface Props extends SelectHTMLAttributes<HTMLSelectElement> {
   label: string
+  /** Label tetap ada untuk pembaca layar, tetapi tidak terlihat. */
+  hideLabel?: boolean
 }
 
-export default function Select({ label, className = '', children, ...rest }: Props) {
+export default function Select({ label, hideLabel = false, className = '', children, ...rest }: Props) {
   const id = useId()
   return (
     <div className="grid min-w-0 gap-1.5">
-      <label htmlFor={id} className="text-xs text-ink-muted">
+      <label htmlFor={id} className={hideLabel ? 'sr-only' : 'text-xs text-ink-muted'}>
         {label}
       </label>
       <select
