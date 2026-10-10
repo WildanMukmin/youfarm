@@ -42,7 +42,7 @@ export default function AccountsView() {
   const count = (f: Filter): number => accounts.filter((a) => MATCH[f](a.state)).length
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return accounts.filter((a) => MATCH[filter](a.state) && (!q || a.channel.title.toLowerCase().includes(q) || a.channel.id.toLowerCase().includes(q)))
+    return accounts.filter((a) => MATCH[filter](a.state) && (!q || a.channel.title.toLowerCase().includes(q) || a.channel.id.toLowerCase().includes(q) || (a.email ?? '').toLowerCase().includes(q)))
   }, [accounts, query, filter])
   const pg = paginate(filtered, page, perPage === AUTO ? fit.rows : perPage)
   const needAction = count('action')
@@ -111,7 +111,7 @@ export default function AccountsView() {
                   setQuery(v)
                   setPage(1)
                 }}
-                placeholder="Cari nama atau ID channel"
+                placeholder="Cari channel atau email"
               />
             </div>
           </div>

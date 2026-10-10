@@ -14,6 +14,8 @@ export const MIN_TARGET_SEC = 5
 export const MAX_TARGET_SEC = 3600
 /** Di atas ini video tidak lagi tampil sebagai Shorts di YouTube. */
 export const SHORTS_MAX_SEC = 180
+/** Video lebih pendek dari ini tanpa hook: pembuka 3 detik terlalu besar porsinya. */
+export const MIN_HOOK_SEC = 20
 
 export interface FaktaUnikOptions {
   /** Topik atau niche, mis. "fakta aneh tentang laut dalam". */
@@ -34,6 +36,8 @@ export interface FaktaUnikOptions {
   stockSource: (typeof STOCK_SOURCES)[number]
   /** Format video akhir. Memilih beberapa format di form berarti video ini diulang sekali per format. */
   aspect: AspectRatio
+  /** Hook pembuka: kalimat pemancing penasaran sebelum penjelasan, tampil sebagai teks besar. Hanya berlaku bila durasi ≥ MIN_HOOK_SEC. */
+  hook: boolean
   /** Topik yang sudah pernah dipakai, supaya tidak berulang. */
   avoid: string[]
 }
@@ -50,8 +54,12 @@ export const DEFAULT_OPTIONS: FaktaUnikOptions = {
   caption: DEFAULT_CAPTION,
   stockSource: 'pixabay',
   aspect: '9:16',
+  hook: true,
   avoid: []
 }
+
+/** Hook benar-benar dipakai untuk video ini. */
+export const hookEnabled = (o: Pick<FaktaUnikOptions, 'hook' | 'targetSec'>): boolean => o.hook && o.targetSec >= MIN_HOOK_SEC
 
 export interface ScriptSentence {
   /** Kalimat yang dibacakan. */
@@ -62,6 +70,11 @@ export interface ScriptSentence {
 
 export interface FaktaScript {
   title: string
+  /** Kalimat pembuka pemancing penasaran, terpisah dari `sentences`. Null bila tidak dipakai. */
+  hook: string | null
+  hookKeywords: string[]
+  /** Alasan hook diminta tetapi tidak bisa dipakai (kosong, terlalu panjang, tidak nyambung dengan isi). */
+  hookIssue: string | null
   sentences: ScriptSentence[]
   description: string
   tags: string[]
@@ -102,6 +115,7 @@ export function validateOptions(input: unknown): FaktaUnikOptions {
     caption: captionFrom(o),
     stockSource: pick(STOCK_SOURCES, o.stockSource, DEFAULT_OPTIONS.stockSource),
     aspect: pick(ASPECT_RATIOS, o.aspect, DEFAULT_OPTIONS.aspect),
+    hook: typeof o.hook === 'boolean' ? o.hook : DEFAULT_OPTIONS.hook,
     avoid: Array.isArray(o.avoid) ? o.avoid.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean).slice(0, 50) : []
   }
 }
@@ -118,6 +132,7 @@ export function sentenceRange(targetSec: number): { min: number; max: number } {
 }
 
 export function buildScriptPrompt(o: FaktaUnikOptions): { system: string; user: string } {
+  const withHook = hookEnabled(o)
   const lang = languageInfo(o.language)
   const len = targetLength(o)
   const perSentence = lang.unit === 'char' ? '12 sampai 45 karakter' : '6 sampai 22 kata'
@@ -125,7 +140,9 @@ export function buildScriptPrompt(o: FaktaUnikOptions): { system: string; user: 
   const system = [
     'Kamu penulis naskah video pendek vertikal "fakta unik" untuk YouTube Shorts.',
     'Tulis naskah yang akurat, menarik, dan orisinal. Jangan mengarang angka atau klaim yang tidak pasti; bila ragu, pilih fakta lain.',
-    'Kalimat pertama adalah hook yang membuat penonton bertahan. Kalimat terakhir menutup dengan kesan kuat, tanpa meminta like atau subscribe.',
+    withHook
+      ? 'Naskah dibuka dengan "hook" yang terpisah dari isi: satu kalimat pendek yang memancing rasa penasaran atau plot twist tentang fakta ini, tanpa membocorkan jawabannya. Pilih sendiri gaya terkuat: pertanyaan yang bikin penasaran, kontradiksi yang mengejutkan, atau angka yang tidak masuk akal. Hook tidak boleh menyesatkan: isi naskah WAJIB menjawab dan membuktikan hook itu. Isi naskah langsung masuk ke penjelasan dan tidak mengulang hook. Kalimat terakhir isi menutup dengan kesan kuat, tanpa meminta like atau subscribe.'
+      : 'Kalimat pertama adalah hook yang membuat penonton bertahan. Kalimat terakhir menutup dengan kesan kuat, tanpa meminta like atau subscribe.',
     `Tulis judul, kalimat naskah, deskripsi, dan tag dalam ${lang.promptName}, dengan gaya bertutur yang alami bagi penutur aslinya.`,
     'Keluaran HANYA JSON valid sesuai skema, tanpa teks lain.'
   ].join(' ')
@@ -134,7 +151,7 @@ export function buildScriptPrompt(o: FaktaUnikOptions): { system: string; user: 
   const user = [
     `Topik: ${o.topic}`,
     `Bahasa naskah: ${lang.promptName}.`,
-    `Total sekitar ${len.amount} ${len.unit} (target ${o.targetSec} detik), dibagi ${min} sampai ${max} kalimat. Tiap kalimat ${perSentence}, mudah diucapkan.`,
+    `Total sekitar ${len.amount} ${len.unit} (target ${o.targetSec} detik${withHook ? ', sudah termasuk hook' : ''}), ${withHook ? 'isi dibagi' : 'dibagi'} ${min} sampai ${max} kalimat. Tiap kalimat ${perSentence}, mudah diucapkan.${withHook ? ` Hook maksimal ${lang.unit === 'char' ? '30 karakter' : '12 kata'}.` : ''}`,
     'Untuk tiap kalimat beri 2 sampai 3 kata kunci visual dalam bahasa Inggris untuk mencari footage stock: benda atau pemandangan yang konkret dan bisa difilmkan, bukan konsep abstrak.',
     avoid,
     '',
@@ -142,6 +159,7 @@ export function buildScriptPrompt(o: FaktaUnikOptions): { system: string; user: 
     '',
     'Skema JSON:',
     '{"title": string (maks 70 karakter, menarik, tanpa clickbait menyesatkan),',
+    ...(withHook ? [' "hook": string (satu kalimat pembuka pemancing penasaran),', ' "hookKeywords": [string] (2 sampai 3 kata kunci visual Inggris untuk footage hook),'] : []),
     ' "sentences": [{"text": string, "keywords": [string]}],',
     ' "description": string (2 sampai 3 kalimat ringkasan, bahasa yang sama dengan naskah),',
     ' "tags": [string] (5 sampai 10 tag)}'
@@ -207,7 +225,32 @@ const clean = (s: unknown): string => (typeof s === 'string' ? s.replace(/\s+/g,
 /** Batas pengaman jumlah kalimat dari AI (cukup untuk durasi sangat panjang). */
 const MAX_SENTENCES = 720
 
-export function parseScript(json: unknown): FaktaScript {
+/** Hook terpanjang yang masih diterima (lebih longgar dari permintaan di prompt): kata untuk bahasa berspasi, karakter untuk lainnya. */
+const HOOK_MAX = { word: 20, char: 50 }
+
+const contentWords = (text: string, language: string): Set<string> =>
+  new Set((text.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? []).filter((w) => !(STOPWORDS[language]?.has(w) ?? false)))
+
+/** Periksa hook dari AI. Mengembalikan hook yang bisa dipakai, atau alasan penolakannya. */
+function checkHook(j: Record<string, unknown>, body: ScriptSentence[], language: string, title: string): { hook: string | null; keywords: string[]; issue: string | null } {
+  const hook = clean(j.hook)
+  if (!hook) return { hook: null, keywords: [], issue: 'AI tidak menulis hook.' }
+  const spaced = languageInfo(language).unit !== 'char'
+  const size = spaced ? hook.split(/\s+/).length : [...hook].length
+  if (size > (spaced ? HOOK_MAX.word : HOOK_MAX.char)) return { hook: null, keywords: [], issue: 'Hook dari AI terlalu panjang.' }
+  if (hook.toLowerCase() === body[0]?.text.toLowerCase()) return { hook: null, keywords: [], issue: 'Hook sama dengan kalimat pertama isi.' }
+  const keywords = (Array.isArray(j.hookKeywords) ? j.hookKeywords : []).map(clean).filter(Boolean).slice(0, 4)
+  const result = { hook, keywords: keywords.length ? keywords : body[0]?.keywords ?? [title] }
+  // Hook harus berasal dari isi: sedikitnya satu kata bermakna sama-sama muncul. Bahasa tanpa spasi tidak diperiksa.
+  if (spaced) {
+    const mine = contentWords(hook, language)
+    const theirs = contentWords(body.map((s) => s.text).join(' ') + ' ' + title, language)
+    if (mine.size >= 2 && ![...mine].some((w) => theirs.has(w))) return { ...result, hook, issue: 'Hook tampak tidak berkaitan dengan isi naskah.' }
+  }
+  return { ...result, issue: null }
+}
+
+export function parseScript(json: unknown, opts: { hook?: boolean; language?: string } = {}): FaktaScript {
   const j = (typeof json === 'object' && json !== null ? json : {}) as Record<string, unknown>
   const title = clean(j.title).slice(0, 100)
   if (!title) throw new Error('Naskah dari AI tidak punya judul.')
@@ -225,7 +268,9 @@ export function parseScript(json: unknown): FaktaScript {
   if (sentences.length > MAX_SENTENCES) sentences.length = MAX_SENTENCES
 
   const tags = (Array.isArray(j.tags) ? j.tags : []).map(clean).filter(Boolean).slice(0, 12)
-  return { title, sentences, description: clean(j.description), tags }
+  const checked = opts.hook ? checkHook(j, sentences, opts.language ?? 'id', title) : { hook: null, keywords: [], issue: null }
+  // Hook yang tidak nyambung dengan isi tetap dikembalikan, bersama alasannya, supaya pemanggil bisa meminta ulang dulu.
+  return { title, hook: checked.hook, hookKeywords: checked.keywords, hookIssue: checked.issue, sentences, description: clean(j.description), tags }
 }
 
 const STOPWORDS: Record<string, Set<string>> = {
@@ -254,7 +299,7 @@ export function scriptLanguageMismatch(script: FaktaScript, language: string): b
 
 /** Naskah dianggap pas bila panjangnya dalam ±40% target. Hanya peringatan, bukan penolakan. */
 export function scriptLengthWarning(script: FaktaScript, o: Pick<FaktaUnikOptions, 'language' | 'targetSec'>): string | null {
-  const got = script.sentences.reduce((n, s) => n + speechUnits(s.text, o.language), 0)
+  const got = script.sentences.reduce((n, s) => n + speechUnits(s.text, o.language), script.hook ? speechUnits(script.hook, o.language) : 0)
   const { amount, unit } = targetLength(o)
   if (got < amount * 0.6) return `Naskah agak pendek (${got} ${unit}, target sekitar ${amount}).`
   if (got > amount * 1.4) return `Naskah agak panjang (${got} ${unit}, target sekitar ${amount}).`

@@ -7,6 +7,7 @@ import { createAccountService, type Endpoints } from '../../src/main/youtube/acc
 import {
   SCOPE_ANALYTICS,
   SCOPE_UPLOAD,
+  SCOPE_EMAIL,
   SCOPE_READONLY,
   accountState,
   type StoredYoutube
@@ -41,7 +42,7 @@ async function startFakeGoogle(): Promise<FakeGoogle> {
   const state: FakeGoogle['state'] = {
     challenge: '',
     tokenAlive: true,
-    grantedScope: [SCOPE_READONLY, SCOPE_UPLOAD, SCOPE_ANALYTICS].join(' '),
+    grantedScope: [SCOPE_READONLY, SCOPE_UPLOAD, SCOPE_ANALYTICS, SCOPE_EMAIL].join(' '),
     revokeCalls: 0,
     returnRefreshToken: true,
     channelOk: true
@@ -75,6 +76,10 @@ async function startFakeGoogle(): Promise<FakeGoogle> {
     if (url.pathname === '/youtube/v3/channels') {
       if (req.headers.authorization !== 'Bearer AT-1' || !state.channelOk) return json(res, 200, { items: [] })
       return json(res, 200, { items: [{ id: 'UC123', snippet: { title: 'Kanal Uji' } }] })
+    }
+    if (url.pathname === '/oauth2/v3/userinfo') {
+      if (req.headers.authorization !== 'Bearer AT-1') return json(res, 401, { error: 'invalid_token' })
+      return json(res, 200, { sub: '1', email: 'pemilik@example.com' })
     }
     json(res, 404, {})
   })
@@ -115,11 +120,26 @@ test('connect: alur PKCE penuh menyimpan akun dengan token terenkripsi', async (
     assert.equal(status.accounts[0].channel.title, 'Kanal Uji')
     assert.equal(status.accounts[0].state, 'ok')
     assert.equal(status.accounts[0].canAnalytics, true)
+    assert.equal(status.accounts[0].email, 'pemilik@example.com')
 
     const raw = JSON.stringify(getStore())
     assert.ok(!raw.includes('RT-1'), 'refresh token tidak boleh tersimpan polos')
     assert.ok(!raw.includes('"rahasia"') && !raw.includes('rahasia"'), 'secret tidak boleh tersimpan polos')
     assert.ok(!JSON.stringify(status).includes('RT-1'))
+  } finally {
+    closeFake(g)
+  }
+})
+
+test('connect: izin email tidak diberikan -> akun tetap terhubung tanpa email', async () => {
+  const g = await startFakeGoogle()
+  try {
+    g.state.grantedScope = [SCOPE_READONLY, SCOPE_UPLOAD, SCOPE_ANALYTICS].join(' ')
+    const { service } = makeService(g)
+    service.setCredentials(CLIENT_ID, 'rahasia')
+    const status = await service.connect()
+    assert.equal(status.accounts[0].email, null)
+    assert.equal(status.accounts[0].state, 'ok')
   } finally {
     closeFake(g)
   }

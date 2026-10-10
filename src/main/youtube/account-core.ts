@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import type { Codec } from '../platform/secret-store.ts'
 import {
+  SCOPE_EMAIL,
   YOUTUBE_SCOPES,
   accountInfos,
   markChecked,
@@ -75,6 +76,17 @@ export function createAccountService(deps: AccountDeps) {
     return { id: item.id, title: item.snippet?.title ?? item.id }
   }
 
+  /** Email akun Google. Hanya tambahan tampilan, jadi kegagalan di sini tidak boleh menggagalkan penghubungan. */
+  async function fetchEmail(accessToken: string): Promise<string | undefined> {
+    try {
+      const res = await googleRequest(`${ep.api}/oauth2/v3/userinfo`, { headers: { Authorization: `Bearer ${accessToken}` } })
+      const email = res.ok ? res.body.email : undefined
+      return typeof email === 'string' && email.includes('@') ? email : undefined
+    } catch {
+      return undefined
+    }
+  }
+
   async function revoke(refreshTokenBlob: string): Promise<boolean> {
     try {
       const res = await googleRequest(ep.revoke, {
@@ -146,10 +158,14 @@ export function createAccountService(deps: AccountDeps) {
         )
       }
 
-      const channel = await fetchChannel(token.body.access_token as string)
+      const accessToken = token.body.access_token as string
+      const channel = await fetchChannel(accessToken)
+      const granted = typeof token.body.scope === 'string' ? token.body.scope.split(' ') : YOUTUBE_SCOPES
+      const email = granted.includes(SCOPE_EMAIL) ? await fetchEmail(accessToken) : undefined
       const at = now().toISOString()
       const account: StoredAccount = {
         channel,
+        ...(email ? { email } : {}),
         refreshToken: deps.codec.encrypt(refreshToken),
         connectedAt: at,
         // Izin yang benar-benar diberikan; pengguna bisa mencentang sebagian di halaman Google.

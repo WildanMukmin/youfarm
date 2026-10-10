@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { ASPECT_INFO, type RenderedVideo } from '../../../shared/contracts/modes.ts'
 import {
   buildScriptPrompt,
+  hookEnabled,
   parseScript,
   scriptLanguageMismatch,
   scriptLengthWarning,
@@ -140,38 +141,50 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
     // 1. Naskah. Satu kali ulang bila keluaran AI tidak bisa dipakai.
     report('script', 2, 'Menulis naskah…')
     const prompt = buildScriptPrompt(options)
+    const withHook = hookEnabled(options)
     let script: FaktaScript | null = null
+    // Naskah percobaan pertama yang hook-nya bermasalah; dipakai bila percobaan kedua gagal total.
+    let fallback: FaktaScript | null = null
     let lastErr: unknown
     for (let attempt = 0; attempt < 2 && !script; attempt++) {
       check()
       try {
-        const parsed = parseScript(await deps.llm({ ...prompt, options, signal }))
+        const parsed = parseScript(await deps.llm({ ...prompt, options, signal }), { hook: withHook, language: options.language })
         if (scriptLanguageMismatch(parsed, options.language)) throw new Error(`AI menulis naskah bukan dalam bahasa yang dipilih (${options.language}). Coba lagi atau pakai model lain.`)
+        if (parsed.hookIssue && attempt === 0) {
+          fallback = parsed
+          throw new Error(parsed.hookIssue)
+        }
         script = parsed
       } catch (e) {
         lastErr = e
         if (signal?.aborted) throw e
       }
     }
+    script ??= fallback
     if (!script) throw lastErr instanceof Error ? lastErr : new Error('Gagal membuat naskah.')
+    if (withHook && script.hookIssue) warnings.push(script.hook ? `Hook tetap dipakai walau ada catatan: ${script.hookIssue}` : `Video dibuat tanpa hook. ${script.hookIssue}`)
+    // Hook dibacakan dan dirender seperti kalimat pertama; hanya tampilannya yang berbeda.
+    const lines: { text: string; keywords: string[] }[] = [...(script.hook ? [{ text: script.hook, keywords: script.hookKeywords }] : []), ...script.sentences]
+    const hooked = script.hook !== null
     const lengthWarning = scriptLengthWarning(script, options)
     if (lengthWarning) warnings.push(lengthWarning)
-    const n = script.sentences.length
+    const n = lines.length
     report('script', 10, `Naskah siap (${n} kalimat).`)
 
     // 2. Suara per kalimat, lalu digabung jadi satu narasi.
-    const wavs = script.sentences.map((_, i) => join(job, `s${i}.wav`))
+    const wavs = lines.map((_, i) => join(job, `s${i}.wav`))
     const speech: number[] = []
     // Sumber suara yang membatasi jumlah permintaan membacakan seluruh naskah sekali jalan.
     check()
     report('voice', 10, 'Membuat suara…')
-    const batch = await deps.speakAll?.({ texts: script.sentences.map((s) => s.text), outs: wavs, options, signal })
+    const batch = await deps.speakAll?.({ texts: lines.map((s) => s.text), outs: wavs, options, signal })
     if (batch) warnings.push(...batch.warnings)
     for (let i = 0; i < n; i++) {
       check()
       if (!batch) {
         report('voice', 10 + Math.round((i / n) * 20), `Membuat suara ${i + 1}/${n}…`)
-        await deps.speak({ text: script.sentences[i].text, out: wavs[i], options, signal })
+        await deps.speak({ text: lines[i].text, out: wavs[i], options, signal })
       }
       speech.push(await deps.ffmpeg.duration(wavs[i]))
     }
@@ -202,7 +215,7 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
     for (let i = 0; i < n; i++) {
       check()
       report('visual', 32 + Math.round((i / n) * 28), `Mencari footage ${i + 1}/${n}…`)
-      const queries = searchQueries(script.sentences[i].keywords)
+      const queries = searchQueries(lines[i].keywords)
       const localClip = (relaxed: boolean) => lib?.pick(source, queries, { neededSec: durations[i], used, seq, rng, relaxed }) ?? null
       let path: string | null = null
 
@@ -254,7 +267,7 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
       if (!path) {
         // Tidak ada footage baru: pakai ulang segmen sebelumnya daripada menggagalkan seluruh video.
         const prev = segments.at(-1)
-        if (!prev) throw new Error(`Tidak menemukan footage untuk "${script.sentences[i].keywords.join(', ')}". Coba topik lain.`)
+        if (!prev) throw new Error(`Tidak menemukan footage untuk "${lines[i].keywords.join(', ')}". Coba topik lain.`)
         warnings.push(`Kalimat ${i + 1} memakai ulang footage sebelumnya (tidak ada hasil pencarian baru).`)
         path = prev.path
       }
@@ -266,7 +279,7 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
 
     // 4. Caption.
     let t = 0
-    const timings: SentenceTiming[] = script.sentences.map((s, i) => {
+    const timings: SentenceTiming[] = lines.map((s, i) => {
       const timing = { text: s.text, start: t, speechSec: speech[i] }
       t += speech[i] + pads[i]
       return timing
@@ -274,7 +287,11 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
     const chunks = buildChunks(timings, options.language, options.caption.wordsPerChunk)
     const { width, height } = ASPECT_INFO[options.aspect]
     await cp(deps.fontsDir, join(job, 'fonts'), { recursive: true, filter: (src) => !/\.txt$/i.test(src) })
-    await writeFile(join(job, 'captions.ass'), toAss(chunks, options.caption, options.language, { width, height }))
+    // Hook tampil sebagai satu teks besar, bukan caption kata demi kata; SRT tetap memuat seluruh ucapan.
+    const hookEnd = durations[0]
+    const assChunks = hooked ? chunks.filter((c) => c.start >= hookEnd - 1e-6) : chunks
+    const overlay = hooked ? { text: script.hook as string, start: 0, end: hookEnd } : undefined
+    await writeFile(join(job, 'captions.ass'), toAss(assChunks, options.caption, options.language, { width, height }, overlay))
     const base = `${slug(script.title)}-${stamp}`
     const srtPath = join(deps.outDir, `${base}.srt`)
     await writeFile(srtPath, toSrt(chunks, options.language), 'utf8')
@@ -316,7 +333,7 @@ export async function runFaktaUnik(rawOptions: unknown, deps: PipelineDeps, sign
         mode: 'fakta-unik',
         template: null,
         title: script.title,
-        script: script.sentences.map((s) => s.text).join(' '),
+        script: lines.map((s) => s.text).join(' '),
         // Narasi dibuat oleh suara AI, jadi ditandai sintetis.
         syntheticMedia: true,
         language: options.language,

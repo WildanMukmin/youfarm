@@ -84,7 +84,7 @@ const api = {
     cancelCurrent: (): Promise<void> => ipcRenderer.invoke(IPC.queueCancelCurrent),
     pause: (): Promise<QueueSnapshot> => ipcRenderer.invoke(IPC.queuePause),
     resume: (): Promise<QueueSnapshot> => ipcRenderer.invoke(IPC.queueResume),
-    /** Buka video di YouTube Studio (hanya item yang sudah terunggah). */
+    /** Buka halaman tonton video di YouTube (hanya item yang sudah terunggah). */
     openVideo: (id: number): Promise<void> => ipcRenderer.invoke(IPC.queueOpenVideo, id),
     /** Hanya ada handler-nya di build pengembangan dengan YOUFARM_DEV_ENQUEUE; di rilis memanggilnya akan ditolak. */
     devEnqueue: (req: EnqueueRequest): Promise<number> => ipcRenderer.invoke('queue:dev-enqueue', req)

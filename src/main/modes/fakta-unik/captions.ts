@@ -69,12 +69,32 @@ function chunkIntro(style: CaptionStyle): string {
   return ''
 }
 
+/** Teks hook di pembuka: satu teks besar yang diam selama hook dibacakan, menggantikan caption kata demi kata. */
+export interface HookOverlay {
+  text: string
+  start: number
+  end: number
+}
+
+/** Letak teks hook, persen tinggi frame: di atas area caption supaya keduanya tidak bertabrakan. */
+const HOOK_Y_PERCENT = 40
+/** Ukuran teks hook relatif terhadap caption. */
+const HOOK_SIZE_RATIO = 1.25
+/** Frame lanskap lebih pendek dari lebarnya, jadi hook dibesarkan agar tetap mencolok dan membungkus jadi beberapa baris. */
+const HOOK_WIDE_BOOST = 1.6
+
 /**
  * Berkas ASS dari potongan bertimestamp, berukuran `dims` (bawaan 1080x1920). Bila kata aktif disorot (warna atau
  * zoom), tiap kata jadi satu event supaya sorotnya hanya menyala saat kata itu diucapkan. Font harus ada di folder
  * font untuk ffmpeg atau terpasang di Windows; huruf yang tidak ada diambil libass dari font sistem.
  */
-export function toAss(chunks: CaptionChunk[], style: CaptionStyle, language: string, dims: { width: number; height: number } = { width: CAPTION_REF_WIDTH, height: CAPTION_REF_HEIGHT }): string {
+export function toAss(
+  chunks: CaptionChunk[],
+  style: CaptionStyle,
+  language: string,
+  dims: { width: number; height: number } = { width: CAPTION_REF_WIDTH, height: CAPTION_REF_HEIGHT },
+  hook?: HookOverlay
+): string {
   const W = dims.width
   const H = dims.height
   // Ukuran dan garis di CaptionStyle dirancang untuk frame setinggi acuan (1920); format lain diskalakan sebanding tingginya.
@@ -112,6 +132,11 @@ export function toAss(chunks: CaptionChunk[], style: CaptionStyle, language: str
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text'
   ]
+  if (hook) {
+    // Gaya Hook disisipkan setelah gaya Caption: teks besar warna sorot, garis tepi tebal supaya terbaca di footage apa pun.
+    const hookStyle = `Style: Hook,${style.font},${Math.round(size * HOOK_SIZE_RATIO * (W > H ? HOOK_WIDE_BOOST : 1))},${assColor(style.highlightColor)},${assColor(style.highlightColor)},${assColor('#000000')},${shadowColor},-1,0,0,0,100,100,0,0,1,${Math.max(outline, Math.round(8 * scale))},${Math.max(shadow, Math.round(3 * scale))},5,${margin},${margin},0,1`
+    header.splice(header.findIndex((l) => l.startsWith('Style: Caption')) + 1, 0, hookStyle)
+  }
 
   const join = wordJoiner(language)
   const shape = (t: string): string => escapeAss(style.uppercase ? t.toLocaleUpperCase(language) : t)
@@ -119,6 +144,11 @@ export function toAss(chunks: CaptionChunk[], style: CaptionStyle, language: str
   const line = (start: number, end: number, text: string): string => `Dialogue: 0,${assTime(start)},${assTime(end)},Caption,,${margin},${margin},0,,${pos}${text}`
 
   const events: string[] = []
+  if (hook) {
+    const text = escapeAss(style.uppercase ? hook.text.toLocaleUpperCase(language) : hook.text)
+    const at = `{\\an5\\pos(${Math.round(W / 2)},${Math.round((HOOK_Y_PERCENT / 100) * H)})\\fad(120,0)\\fscx85\\fscy85\\t(0,160,\\fscx100\\fscy100)}`
+    events.push(`Dialogue: 1,${assTime(hook.start)},${assTime(hook.end)},Hook,,${margin},${margin},0,,${at}${text}`)
+  }
   chunks.forEach((c, ci) => {
     // Potongan tetap tampil sampai potongan berikutnya mulai bila jedanya pendek, supaya caption tidak berkedip.
     const next = chunks[ci + 1]

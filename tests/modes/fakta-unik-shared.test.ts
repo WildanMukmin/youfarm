@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   DEFAULT_OPTIONS,
+  hookEnabled,
   MAX_TARGET_SEC,
   MIN_TARGET_SEC,
   buildScriptPrompt,
@@ -94,13 +95,13 @@ test('parseScript: menolak bentuk yang tidak bisa dipakai', () => {
 })
 
 test('scriptLengthWarning: peringatan hanya bila jauh dari target', () => {
-  const mk = (words: number) => ({ title: 't', description: '', tags: [], sentences: [{ text: Array.from({ length: words }, () => 'kata').join(' '), keywords: ['a'] }] })
+  const mk = (words: number) => ({ title: 't', hook: null, hookKeywords: [], hookIssue: null, description: '', tags: [], sentences: [{ text: Array.from({ length: words }, () => 'kata').join(' '), keywords: ['a'] }] })
   const opt = { language: 'id', targetSec: 45 } as const
   assert.equal(scriptLengthWarning(mk(targetLength(opt).amount), opt), null)
   assert.match(scriptLengthWarning(mk(20), opt) ?? '', /pendek/)
   assert.match(scriptLengthWarning(mk(400), opt) ?? '', /panjang/)
   const zh = { language: 'zh', targetSec: 30 } as const
-  const zhScript = { title: 't', description: '', tags: [], sentences: [{ text: '深海'.repeat(68) + '。', keywords: ['a'] }] }
+  const zhScript = { title: 't', hook: null, hookKeywords: [], hookIssue: null, description: '', tags: [], sentences: [{ text: '深海'.repeat(68) + '。', keywords: ['a'] }] }
   assert.equal(scriptLengthWarning(zhScript, zh), null, '136 karakter mendekati target 135')
 })
 
@@ -120,7 +121,7 @@ test('saran topik: prompt memakai niche bila ada, dan hasil AI dirapikan', () =>
 
 test('scriptLanguageMismatch: mendeteksi naskah Inggris saat dipilih Indonesia dan sebaliknya', async () => {
   const { scriptLanguageMismatch } = await import('../../src/shared/modes/fakta-unik.ts')
-  const mk = (...t: string[]) => ({ title: 't', description: '', tags: [], sentences: t.map((text) => ({ text, keywords: ['a'] })) })
+  const mk = (...t: string[]) => ({ title: 't', hook: null, hookKeywords: [], hookIssue: null, description: '', tags: [], sentences: t.map((text) => ({ text, keywords: ['a'] })) })
   const en = mk("Neptune's rings are thin, faint, and icy dust.", 'They formed from the debris of shattered moons.', 'Gravity is what keeps the rings in place.')
   const id = mk('Cincin Neptunus tipis dan terbuat dari debu es.', 'Cincin itu terbentuk dari sisa bulan yang hancur.', 'Gravitasi yang menjaga cincin tetap di tempatnya.')
   assert.equal(scriptLanguageMismatch(en, 'id'), true)
@@ -128,4 +129,46 @@ test('scriptLanguageMismatch: mendeteksi naskah Inggris saat dipilih Indonesia d
   assert.equal(scriptLanguageMismatch(id, 'en'), true)
   assert.equal(scriptLanguageMismatch(en, 'en'), false)
   assert.equal(scriptLanguageMismatch(en, 'ja'), false, 'bahasa lain tidak diperiksa')
+})
+
+test('hook: opsi, prompt, dan validasi hasil AI', () => {
+  assert.equal(DEFAULT_OPTIONS.hook, true)
+  assert.equal(validateOptions({ topic: 'fakta laut', hook: false }).hook, false)
+  assert.equal(validateOptions({ topic: 'fakta laut', hook: 'ya' }).hook, true, 'tak valid kembali ke bawaan')
+
+  const on = validateOptions({ topic: 'fakta laut dalam', targetSec: 45 })
+  assert.equal(hookEnabled(on), true)
+  assert.equal(hookEnabled({ hook: true, targetSec: 15 }), false, 'terlalu pendek untuk hook')
+  assert.equal(hookEnabled({ hook: false, targetSec: 60 }), false)
+  const withHook = buildScriptPrompt(on)
+  assert.match(withHook.user, /"hook": string/)
+  assert.match(withHook.user, /sudah termasuk hook/)
+  assert.match(withHook.system, /hook.*terpisah/)
+  const without = buildScriptPrompt(validateOptions({ topic: 'fakta laut dalam', hook: false }))
+  assert.doesNotMatch(without.user, /"hook"/)
+
+  const body = [
+    { text: 'Laut dalam menyimpan tekanan air yang luar biasa besar.', keywords: ['deep ocean'] },
+    { text: 'Tekanan itu bisa meremukkan kapal selam biasa.', keywords: ['submarine'] },
+    { text: 'Makhluk di sana bercahaya sendiri untuk berburu.', keywords: ['jellyfish'] }
+  ]
+  const raw = (hook: unknown) => ({ title: 'Laut Dalam', hook, hookKeywords: ['deep ocean', 'dark water'], sentences: body })
+  const ok = parseScript(raw('Kenapa kapal selam bisa remuk di laut dalam?'), { hook: true, language: 'id' })
+  assert.equal(ok.hook, 'Kenapa kapal selam bisa remuk di laut dalam?')
+  assert.deepEqual(ok.hookKeywords, ['deep ocean', 'dark water'])
+  assert.equal(ok.hookIssue, null)
+  // Tanpa opsi hook: hook dari AI diabaikan.
+  assert.equal(parseScript(raw('Kenapa kapal selam bisa remuk di laut dalam?')).hook, null)
+  assert.match(parseScript(raw(''), { hook: true }).hookIssue ?? '', /tidak menulis hook/)
+  assert.match(parseScript(raw('kata '.repeat(25)), { hook: true }).hookIssue ?? '', /terlalu panjang/)
+  assert.match(parseScript(raw(body[0].text), { hook: true }).hookIssue ?? '', /sama dengan kalimat pertama/)
+  assert.match(parseScript(raw('Bagaimana gunung berapi meletus kemarin sore?'), { hook: true, language: 'id' }).hookIssue ?? '', /tidak berkaitan/)
+  // Bahasa tanpa spasi tidak diperiksa kesamaannya.
+  assert.equal(parseScript(raw('深海の圧力はなぜ恐ろしいのか'), { hook: true, language: 'ja' }).hookIssue, null)
+  // Hook ikut dihitung panjang naskah.
+  const opt = { language: 'id', targetSec: 45 } as const
+  const size = Math.floor(targetLength(opt).amount * 1.4) - 2
+  const script = { ...ok, sentences: [{ text: Array.from({ length: size }, () => 'kata').join(' '), keywords: ['a'] }] }
+  assert.equal(scriptLengthWarning({ ...script, hook: null }, opt), null)
+  assert.match(scriptLengthWarning(script, opt) ?? '', /panjang/)
 })

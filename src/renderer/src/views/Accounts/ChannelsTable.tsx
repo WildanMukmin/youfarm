@@ -14,12 +14,12 @@ export const STATE: Record<AccountState, { tone: Tone; label: string; hint: stri
 }
 
 /**
- * full: semua kolom; medium: tanpa Dicek; narrow: tanpa tanggal (ada di tooltip status);
+ * full: semua kolom; medium: tanpa Dicek dan Kedaluwarsa; narrow: tanpa tanggal (ada di tooltip status);
  * tiny: tanpa kolom jam tayang (tetap bisa diatur lewat tombol jadwal).
  */
 export type Density = 'full' | 'medium' | 'narrow' | 'tiny'
 
-export const densityFor = (width: number): Density => (width >= 1000 ? 'full' : width >= 800 ? 'medium' : width >= 600 ? 'narrow' : 'tiny')
+export const densityFor = (width: number): Density => (width >= 1250 ? 'full' : width >= 900 ? 'medium' : width >= 600 ? 'narrow' : 'tiny')
 
 interface Props {
   density: Density
@@ -45,25 +45,28 @@ export default function ChannelsTable({ density, rows, busyId, connecting, onCon
   const showDates = density === 'full' || density === 'medium'
   const showSlots = density !== 'tiny'
   const showChecked = density === 'full'
+  const showEmail = density === 'full' || density === 'medium'
   return (
     <table className="w-full table-fixed border-separate border-spacing-0 text-sm">
       <colgroup>
         <col />
+        {showEmail && <col className="w-[230px]" />}
         <col className="w-[156px]" />
         {showSlots && <col className="w-[140px]" />}
         {showDates && <col className="w-[110px]" />}
         {showChecked && <col className="w-[120px]" />}
-        {showDates && <col className="w-[120px]" />}
+        {showChecked && <col className="w-[120px]" />}
         <col className="w-[152px]" />
       </colgroup>
       <thead>
         <tr style={{ height: HEAD_HEIGHT }}>
           <th className={th}>Channel</th>
+          {showEmail && <th className={th}>Akun Google</th>}
           <th className={th}>Status</th>
           {showSlots && <th className={th}>Jam tayang</th>}
           {showDates && <th className={th}>Dihubungkan</th>}
           {showChecked && <th className={th}>Dicek</th>}
-          {showDates && (
+          {showChecked && (
             <th className={th} title="Berlaku bila app Google Cloud Anda masih berstatus Testing (token 7 hari)">
               Kedaluwarsa*
             </th>
@@ -83,8 +86,23 @@ export default function ChannelsTable({ density, rows, busyId, connecting, onCon
                 <div className="truncate font-medium" title={a.channel.title}>
                   {a.channel.title}
                 </div>
-                <div className="truncate font-mono text-[11px] text-ink-muted">{a.channel.id}</div>
+                <div className="truncate font-mono text-[11px] text-ink-muted" title={a.channel.id}>
+                  {showEmail ? a.channel.id : (a.email ?? a.channel.id)}
+                </div>
               </td>
+              {showEmail && (
+                <td className={td}>
+                  {a.email ? (
+                    <div className="truncate font-mono text-xs" title={a.email}>
+                      {a.email}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-ink-muted" title="Hubungkan ulang channel ini untuk menampilkan email akun Google.">
+                      —
+                    </span>
+                  )}
+                </td>
+              )}
               <td className={`${td} whitespace-nowrap`} title={`${s.hint}\n${perms}\nDihubungkan ${formatDate(a.connectedAt)} · kedaluwarsa (Testing) ${formatDate(a.testingExpiryAt)}`}>
                 <StatusChip tone={s.tone}>{s.label}</StatusChip>
               </td>
@@ -97,7 +115,7 @@ export default function ChannelsTable({ density, rows, busyId, connecting, onCon
               )}
               {showDates && <td className={`${td} tabular whitespace-nowrap font-mono text-xs`}>{formatDate(a.connectedAt)}</td>}
               {showChecked && <td className={`${td} tabular whitespace-nowrap font-mono text-xs text-ink-muted`}>{a.lastCheckedAt ? formatDateTime(a.lastCheckedAt) : '—'}</td>}
-              {showDates && <td className={`${td} tabular whitespace-nowrap font-mono text-xs text-ink-muted`}>{formatDate(a.testingExpiryAt)}</td>}
+              {showChecked && <td className={`${td} tabular whitespace-nowrap font-mono text-xs text-ink-muted`}>{formatDate(a.testingExpiryAt)}</td>}
               <td className={td}>
                 <div className="flex justify-end gap-1.5">
                   {needs ? <IconButton icon={Link2} tone="primary" label="Hubungkan ulang" disabled={connecting || busy} onClick={onConnect} /> : <IconGap />}

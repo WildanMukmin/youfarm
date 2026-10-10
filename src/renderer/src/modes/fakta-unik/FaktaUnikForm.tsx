@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from
 import { toast } from 'sonner'
 import { MAX_BATCH, splitTopics } from '@shared/production'
 import type { AspectRatio } from '@shared/contracts/modes'
-import { DEFAULT_OPTIONS, MIN_TARGET_SEC, SHORTS_MAX_SEC, type FaktaUnikOptions } from '@shared/modes/fakta-unik'
+import { DEFAULT_OPTIONS, MIN_HOOK_SEC, MIN_TARGET_SEC, SHORTS_MAX_SEC, type FaktaUnikOptions } from '@shared/modes/fakta-unik'
 import { TEXT_PROVIDERS } from '@shared/settings'
 import { DEEPGRAM_VOICES, GEMINI_VOICES, LANGUAGE_LIST, languageInfo, voiceSourceSupports, type LanguageCode, type VoiceOption, type VoiceSource } from '@shared/languages'
 import type { SecretStatus } from '@shared/settings'
@@ -18,6 +18,7 @@ import { useStickyState } from '@/hooks/useStickyState'
 import { refreshQueues } from '@/hooks/useQueue'
 import { errMsg } from '@/lib/errors'
 import Button from '@/ui/Button'
+import Checkbox from '@/ui/Checkbox'
 import Field from '@/ui/Field'
 import Notice from '@/ui/Notice'
 import Panel from '@/ui/Panel'
@@ -239,6 +240,17 @@ export default function FaktaUnikForm({ opts, setOpts, tab, onTab, aspects, onAs
             />
           </div>
           {opts.targetSec > SHORTS_MAX_SEC && <p className="-mt-2 text-xs text-ink-muted">Lebih dari 3 menit, video tidak lagi tampil sebagai Shorts di YouTube.</p>}
+
+          <Checkbox
+            label="Hook pembuka"
+            hint={
+              opts.targetSec >= MIN_HOOK_SEC
+                ? 'AI menulis satu kalimat pemancing penasaran atau plot twist di depan, tampil sebagai teks besar, lalu isinya menjawab. Gayanya dipilih otomatis.'
+                : `Otomatis mati untuk video di bawah ${MIN_HOOK_SEC} detik.`
+            }
+            checked={opts.hook}
+            onChange={(e) => set('hook', e.target.checked)}
+          />
 
           <AspectPicker value={aspects} onChange={onAspects} />
 

@@ -10,6 +10,12 @@ export default function ScriptPanel({ result }: { result: ProductionDetail | nul
         <div className="mb-1 text-xs text-ink-muted">Judul</div>
         <div className="font-display text-base font-semibold">{result.video.title}</div>
       </div>
+      {result.hook && (
+        <div>
+          <div className="mb-1 text-xs text-ink-muted">Hook</div>
+          <p className="rounded-sm border border-line-hi bg-bg px-3 py-2 text-sm font-semibold leading-snug text-crimson-hi">{result.hook}</p>
+        </div>
+      )}
       {result.warnings.map((w) => (
         <Notice key={w} tone="warn">
           {w}

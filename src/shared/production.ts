@@ -50,6 +50,8 @@ export interface ProductionDetail {
   video: Omit<RenderedVideo, 'filePath' | 'thumbnailPath' | 'captionPath'> & { hasThumbnail: boolean }
   description: string
   tags: string[]
+  /** Hook pembuka (teks besar di awal video), bila video memakainya. */
+  hook: string | null
   /** Kalimat naskah. Kosong untuk video yang dibuat sebelum naskah disimpan. */
   sentences: string[]
   warnings: string[]

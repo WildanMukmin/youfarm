@@ -14,6 +14,8 @@ export interface ProductionResult {
   video: RenderedVideo
   description: string
   tags: string[]
+  /** Kalimat pembuka (hook) bila ada; bukan bagian `sentences`. Hasil lama tidak punya. */
+  hook?: string | null
   /** Kalimat naskah, untuk panel Naskah. */
   sentences: string[]
   warnings: string[]
@@ -171,6 +173,7 @@ export function createProductionQueue(deps: ProductionDeps) {
       video: { ...video, hasThumbnail: Boolean(thumbnailPath) },
       description: res.description,
       tags: res.tags,
+      hook: res.hook ?? null,
       sentences: res.sentences ?? [],
       // Kolom warning = peringatan video + (bila ada) kegagalan memasukkan ke antrean upload, digabung spasi.
       warnings: [...res.warnings, (r.warning ?? '').slice(res.warnings.join(' ').length).trim()].filter(Boolean),

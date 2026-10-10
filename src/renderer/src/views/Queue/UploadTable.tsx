@@ -112,7 +112,7 @@ export default function UploadTable({ density, rows, channelNames, onRetry, onRe
                   {attention ? (
                     <IconButton icon={RotateCcw} tone="primary" label="Coba lagi" onClick={() => onRetry(i.id)} />
                   ) : i.status === 'done' && i.videoId ? (
-                    <IconButton icon={ExternalLink} label="Buka di YouTube Studio" onClick={() => onOpen(i.id)} />
+                    <IconButton icon={ExternalLink} label="Buka di YouTube" onClick={() => onOpen(i.id)} />
                   ) : (
                     <IconGap />
                   )}

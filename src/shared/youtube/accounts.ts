@@ -4,9 +4,11 @@ import { normalizeSlots } from './schedule.ts'
 export const SCOPE_READONLY = 'https://www.googleapis.com/auth/youtube.readonly'
 export const SCOPE_UPLOAD = 'https://www.googleapis.com/auth/youtube.upload'
 export const SCOPE_ANALYTICS = 'https://www.googleapis.com/auth/yt-analytics.readonly'
+/** Hanya untuk menampilkan email akun Google di tabel Akun; tidak dibutuhkan untuk upload. */
+export const SCOPE_EMAIL = 'https://www.googleapis.com/auth/userinfo.email'
 
-/** Izin yang diminta saat menghubungkan: baca nama kanal, upload, dan analitik. */
-export const YOUTUBE_SCOPES = [SCOPE_READONLY, SCOPE_UPLOAD, SCOPE_ANALYTICS]
+/** Izin yang diminta saat menghubungkan: baca nama kanal, upload, analitik, dan email akun. */
+export const YOUTUBE_SCOPES = [SCOPE_READONLY, SCOPE_UPLOAD, SCOPE_ANALYTICS, SCOPE_EMAIL]
 
 /** Token app Google Cloud yang masih mode Testing kedaluwarsa 7 hari setelah diterbitkan. */
 export const TESTING_TOKEN_DAYS = 7
@@ -26,6 +28,8 @@ export interface StoredAccount {
   refreshToken: string
   connectedAt: string
   scopes: string[]
+  /** Email akun Google pemilik channel. Kosong untuk akun yang dihubungkan sebelum izin email ada, atau bila izinnya tidak diberikan. */
+  email?: string
   lastCheckedAt?: string
   lastCheckOk?: boolean
   /** Jam tayang "HH:MM" waktu lokal. Kosong/undefined = DEFAULT_SLOTS. */
@@ -49,6 +53,8 @@ export type AccountState = 'ok' | 'unchecked' | 'reconnect' | 'needs-analytics'
 
 export interface YoutubeAccountInfo {
   channel: YoutubeChannel
+  /** Email akun Google, atau null bila belum diketahui (hubungkan ulang untuk mengisinya). */
+  email: string | null
   connectedAt: string
   lastCheckedAt: string | null
   state: AccountState
@@ -90,6 +96,7 @@ export function accountInfos(store: StoredYoutube): YoutubeAccountInfo[] {
   return Object.values(store.accounts ?? {})
     .map((a) => ({
       channel: a.channel,
+      email: a.email ?? null,
       connectedAt: a.connectedAt,
       lastCheckedAt: a.lastCheckedAt ?? null,
       state: accountState(a),

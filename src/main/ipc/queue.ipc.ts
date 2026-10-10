@@ -23,7 +23,7 @@ export function registerQueueIpc(): void {
   ipcMain.handle(IPC.queueOpenVideo, async (_e, id: unknown): Promise<void> => {
     const item = q().snapshot().items.find((i) => i.id === itemId(id))
     if (!item?.videoId || !/^[A-Za-z0-9_-]{6,20}$/.test(item.videoId)) throw new Error('Video ini belum ada di YouTube.')
-    await shell.openExternal(`https://studio.youtube.com/video/${item.videoId}/edit`)
+    await shell.openExternal(`https://www.youtube.com/watch?v=${item.videoId}`)
   })
 
   // Renderer tidak boleh memasukkan berkas sembarang ke antrean (bisa dipakai membawa berkas lokal ke YouTube).

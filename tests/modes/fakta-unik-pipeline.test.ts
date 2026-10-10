@@ -283,3 +283,70 @@ test('pipeline: opsi tidak valid ditolak sebelum memanggil AI; pembatalan menghe
   await assert.rejects(runFaktaUnik({ topic: 'fakta laut' }, s.deps, ac.signal), /dibatalkan|Proses dibatalkan/)
   assert.deepEqual(readdirSync(s.deps.workDir), [])
 })
+
+const HOOK_SCRIPT = {
+  ...SCRIPT,
+  hook: 'Kenapa kapal selam bisa remuk di laut dalam?',
+  hookKeywords: ['submarine', 'deep ocean']
+}
+
+test('pipeline dengan hook: jadi segmen pertama (suara, footage, teks besar), caption kata demi kata dimulai sesudahnya', { skip }, async () => {
+  const spoken: string[] = []
+  let ass = ''
+  const base = await setup()
+  const run = base.deps.ffmpeg.run
+  const deps: PipelineDeps = {
+    ...base.deps,
+    llm: async () => HOOK_SCRIPT,
+    speak: async (p) => (spoken.push(p.text), base.deps.speak(p)),
+    ffmpeg: {
+      ...base.deps.ffmpeg,
+      run: async (args, opts) => {
+        if (args.includes('-filter_complex') && opts?.cwd && existsSync(join(opts.cwd, 'captions.ass'))) ass = readFileSync(join(opts.cwd, 'captions.ass'), 'utf8')
+        return run(args, opts)
+      }
+    }
+  }
+  const r = await runFaktaUnik({ topic: 'fakta laut dalam', language: 'id', targetSec: 45 }, deps)
+
+  assert.equal(r.script.hook, HOOK_SCRIPT.hook)
+  assert.equal(spoken[0], HOOK_SCRIPT.hook, 'hook dibacakan pertama')
+  assert.equal(spoken.length, 5, 'hook + 4 kalimat isi')
+  assert.deepEqual(base.searches.length, 5)
+  assert.match(base.searches[0], /submarine/, 'footage pertama dicari dari kata kunci hook')
+  assert.deepEqual(r.warnings.filter((w) => /hook/i.test(w)), [])
+
+  // Overlay hook ada satu, huruf kapital, di layer atas; tidak ada caption kata demi kata untuk kalimat hook.
+  const hookLine = ass.split('\n').filter((l) => l.startsWith('Dialogue: 1,'))
+  assert.equal(hookLine.length, 1)
+  assert.match(hookLine[0], /,Hook,,/)
+  assert.ok(hookLine[0].includes('KENAPA KAPAL SELAM BISA REMUK DI LAUT DALAM?'))
+  assert.match(ass, /^Style: Hook,/m)
+  const captionTexts = ass.split('\n').filter((l) => l.startsWith('Dialogue: 0,')).join(' ')
+  assert.ok(!/REMUK/.test(captionTexts), 'kata hook tidak diulang sebagai caption')
+  assert.match(captionTexts, /TAHUKAH|LAUT/)
+
+  // SRT tetap memuat ucapan hook, supaya track caption YouTube lengkap.
+  assert.match(readFileSync(r.video.captionPath!, 'utf8'), /remuk/i)
+  assert.equal(r.video.script.startsWith(HOOK_SCRIPT.hook), true)
+})
+
+test('pipeline: hook bermasalah diulang sekali, lalu video tetap jadi (tanpa hook) dengan peringatan', { skip }, async () => {
+  let calls = 0
+  const { deps } = await setup({
+    llm: async () => {
+      calls++
+      return { ...SCRIPT, hook: '' }
+    }
+  })
+  const r = await runFaktaUnik({ topic: 'fakta laut dalam', language: 'id', targetSec: 45 }, deps)
+  assert.equal(calls, 2)
+  assert.equal(r.script.hook, null)
+  assert.ok(r.warnings.some((w) => /tanpa hook/i.test(w)))
+
+  // Durasi di bawah batas atau opsi mati: hook tidak diminta sama sekali.
+  const off = await setup({ llm: async () => SCRIPT })
+  const r2 = await runFaktaUnik({ topic: 'fakta laut dalam', language: 'id', hook: false }, off.deps)
+  assert.equal(r2.script.hook, null)
+  assert.deepEqual(r2.warnings.filter((w) => /hook/i.test(w)), [])
+})
